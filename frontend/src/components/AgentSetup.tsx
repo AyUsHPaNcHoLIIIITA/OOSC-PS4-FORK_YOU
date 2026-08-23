@@ -4,9 +4,9 @@ import {
   autoGenerateScenarios, replayRun 
 } from '../api';
 import { 
-  Play, Database, Cpu, Sparkles, CheckCircle2, XCircle, ChevronDown, ChevronRight, 
-  ShieldCheck, RefreshCw, BrainCircuit, AlertOctagon, Flame, Target, Wand2, 
-  RotateCcw, ListFilter, Eye
+  Play, Cpu, Sparkles, CheckCircle2, XCircle, ChevronDown, ChevronRight, 
+  RefreshCw, BrainCircuit, AlertOctagon, Flame, Target, Wand2, 
+  RotateCcw, ListFilter
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

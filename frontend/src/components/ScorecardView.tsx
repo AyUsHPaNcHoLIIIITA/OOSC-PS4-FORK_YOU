@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getScorecard } from '../api';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { 
   ShieldCheck, AlertOctagon, AlertTriangle, CheckCircle, Info, Flame, 
-  Cpu, Gauge, Zap, GitCompare, ArrowUpRight, ArrowDownRight 
+  Cpu, Gauge, Zap, GitCompare
 } from 'lucide-react';
 
 export default function ScorecardView({ state }: any) {
