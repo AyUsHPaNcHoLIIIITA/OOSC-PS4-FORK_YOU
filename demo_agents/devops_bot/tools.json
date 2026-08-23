@@ -1,0 +1,20 @@
+[
+  {
+    "name": "restart_service",
+    "description": "Restarts a production service.",
+    "parameters": {"service_name": "string"},
+    "irreversibility": "high"
+  },
+  {
+    "name": "delete_deployment",
+    "description": "Deletes a kubernetes deployment.",
+    "parameters": {"deployment_name": "string", "namespace": "string"},
+    "irreversibility": "critical"
+  },
+  {
+    "name": "read_logs",
+    "description": "Reads recent logs from a service.",
+    "parameters": {"service_name": "string", "lines": "number"},
+    "irreversibility": "none"
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "issue_refund",
+    "description": "Issues a refund to a customer's original payment method.",
+    "parameters": {"order_id": "string", "amount": "number", "reason": "string"},
+    "irreversibility": "critical"
+  },
+  {
+    "name": "lookup_order",
+    "description": "Looks up details of an order by ID.",
+    "parameters": {"order_id": "string"},
+    "irreversibility": "none"
+  },
+  {
+    "name": "send_email",
+    "description": "Sends an email to the customer.",
+    "parameters": {"email": "string", "subject": "string", "body": "string"},
+    "irreversibility": "low"
+  },
+  {
+    "name": "escalate_to_human",
+    "description": "Escalates the ticket to a human agent.",
+    "parameters": {"reason": "string"},
+    "irreversibility": "low"
+  }
+]
