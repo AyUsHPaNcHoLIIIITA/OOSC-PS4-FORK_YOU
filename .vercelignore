@@ -1,0 +1,9 @@
+# Vercel deploys only the static frontend (see vercel.json buildCommand).
+# Hide the Python backend and other server-side code so Vercel's backend-
+# framework auto-detection does not try to build it as a serverless app.
+# (Without this, Vercel finds backend/app/main.py and fails with
+#  "No Flask entrypoint found".)
+backend/
+data/
+demo_agents/
+run_pipeline.py
