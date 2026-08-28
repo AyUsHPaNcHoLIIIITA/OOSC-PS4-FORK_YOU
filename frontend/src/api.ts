@@ -16,12 +16,13 @@ export const generateScenarios = async (systemPrompt: string, tools: any[], task
   return res.data;
 };
 
-export const executeRuns = async (scenarioIds: string[], agentVersion: string, systemPrompt: string, tools: any[]) => {
+export const executeRuns = async (scenarioIds: string[], agentVersion: string, systemPrompt: string, tools: any[], samples: number = 1) => {
   const res = await api.post('/runs/execute', {
     scenario_ids: scenarioIds,
     agent_version: agentVersion,
     system_prompt: systemPrompt,
-    tools
+    tools,
+    samples
   });
   return res.data;
 };
@@ -71,5 +72,20 @@ export const getScorecard = async (agentVersion: string, previousVersion?: strin
   const res = await api.get(`/scorecard/${agentVersion}`, { params });
   return res.data;
 };
+
+// --- Feature 1: CI Ship-Gate + embeddable badge ---
+export const getCiGate = async (agentVersion: string, previousVersion?: string, minScore?: number) => {
+  const res = await api.post('/ci/gate', {
+    agent_version: agentVersion,
+    previous_version: previousVersion,
+    min_score: minScore ?? 75,
+  });
+  return res.data;
+};
+
+// Absolute (or /api-proxied) URLs for direct <img src> / new-tab use — mirror the
+// same base axios uses, so whatever proxy makes the API reachable also serves these.
+export const badgeUrl = (agentVersion: string) =>
+  `${API_BASE_URL}/badge/${encodeURIComponent(agentVersion)}.svg`;
 
 

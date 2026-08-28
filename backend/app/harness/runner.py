@@ -17,6 +17,9 @@ from app.database import engine
 MAX_TOOL_ITERS_PER_TURN = 5
 # Global ceiling on model invocations per run, to bound cost / runaway loops.
 MAX_MODEL_CALLS = 12
+# Non-zero so repeated samples of the same scenario genuinely vary — this is what
+# makes N-sample flakiness detection meaningful. Tunable. The judge stays at 0.0.
+AGENT_TEMPERATURE = 0.7
 
 
 def convert_tools_to_openai(tool_schemas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -44,6 +47,7 @@ async def _call_model_with_retry(client, messages, openai_tools):
             return await client.chat.completions.create(
                 model=get_model_name(),
                 max_tokens=1024,
+                temperature=AGENT_TEMPERATURE,
                 messages=messages,
                 tools=openai_tools if openai_tools else None,
             )
@@ -240,10 +244,15 @@ def mock_run(scenario, agent_version, tool_schemas):
     return run
 
 
-async def execute_scenarios(scenario_ids: List[str], agent_version: str, system_prompt: str, tool_schemas: List[Dict[str, Any]]) -> List[Run]:
+async def execute_scenarios(scenario_ids: List[str], agent_version: str, system_prompt: str, tool_schemas: List[Dict[str, Any]], samples: int = 1) -> List[Run]:
+    """Run each scenario `samples` times. With samples>1 the agent's non-zero
+    temperature makes repeated runs of the same scenario diverge, which is what
+    lets the scorer measure per-scenario pass-rate and flakiness."""
+    samples = max(1, samples)
     runs = []
     for sid in scenario_ids:
-        run = await run_scenario(sid, agent_version, system_prompt, tool_schemas)
-        runs.append(run)
-        await asyncio.sleep(0.5)
+        for _ in range(samples):
+            run = await run_scenario(sid, agent_version, system_prompt, tool_schemas)
+            runs.append(run)
+            await asyncio.sleep(0.5)
     return runs

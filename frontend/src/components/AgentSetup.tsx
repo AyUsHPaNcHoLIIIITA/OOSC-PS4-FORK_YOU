@@ -218,6 +218,9 @@ export default function AgentSetup({ state, setState }: any) {
   });
   const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'console' | 'scenarios'>('console');
+  // Feature 2: run each scenario N times so flaky (non-deterministic) safety
+  // behavior surfaces as a per-scenario pass-rate instead of a single verdict.
+  const [samplesPerScenario, setSamplesPerScenario] = useState(1);
 
   React.useEffect(() => {
     if (!state.systemPrompt && !state.tools?.length) {
@@ -308,7 +311,7 @@ export default function AgentSetup({ state, setState }: any) {
       addLog(`⚡ Executing ${state.scenarios.length} scenarios in Stateful Sandbox...`);
       const toolsObj = typeof state.tools === 'string' ? JSON.parse(state.tools) : state.tools;
       const scenarioIds = state.scenarios.map((s: any) => s.scenario_id);
-      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj);
+      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj, samplesPerScenario);
       setState((prev: any) => ({ ...prev, runs }));
       addLog(`✅ Captured ${runs.length} execution traces.`);
 
@@ -340,7 +343,7 @@ export default function AgentSetup({ state, setState }: any) {
 
       addLog(`2️⃣ Executing multi-turn test scenarios in Stateful Sandbox against Groq LLM...`);
       const scenarioIds = autoRes.scenarios.map((s: any) => s.scenario_id);
-      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj);
+      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj, samplesPerScenario);
       setState((prev: any) => ({ ...prev, runs }));
       addLog(`✅ Captured ${runs.length} execution traces.`);
 
@@ -380,6 +383,29 @@ export default function AgentSetup({ state, setState }: any) {
     }
     setReplayingRunId(null);
   };
+
+  // Feature 2: collapse repeated samples of the same scenario into a pass-rate.
+  // A scenario that neither always-passes nor always-fails is flaky — the most
+  // dangerous signal, since a single run would have hidden it.
+  const groupVerdictsByScenario = (verdicts: any[]) => {
+    const groups: Record<string, { total: number; passes: number }> = {};
+    for (const v of verdicts) {
+      const key = v.scenario_id || 'unknown';
+      if (!groups[key]) groups[key] = { total: 0, passes: 0 };
+      groups[key].total += 1;
+      if ((v.outcome || v.verdict) === 'PASS') groups[key].passes += 1;
+    }
+    return Object.entries(groups).map(([scenario_id, g]) => ({
+      scenario_id,
+      total: g.total,
+      passes: g.passes,
+      passRate: g.total ? g.passes / g.total : 0,
+      flaky: g.passes > 0 && g.passes < g.total,
+    }));
+  };
+
+  const scenarioStats = state.verdicts?.length ? groupVerdictsByScenario(state.verdicts) : [];
+  const hasMultiSample = scenarioStats.some((s: any) => s.total > 1);
 
   return (
     <div className="space-y-8">
@@ -605,6 +631,27 @@ export default function AgentSetup({ state, setState }: any) {
               })}
             </div>
 
+            {/* Feature 2: N-sample reliability control */}
+            <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-800/80 mt-1">
+              <div>
+                <div className="text-xs font-semibold text-slate-300">Samples per scenario</div>
+                <div className="text-[11px] text-slate-500 leading-snug">Run each scenario N times to surface flaky (non-deterministic) safety behavior.</div>
+              </div>
+              <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                {[1, 3, 5].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setSamplesPerScenario(n)}
+                    className={`text-xs font-semibold px-3 py-1 rounded transition-colors ${
+                      samplesPerScenario === n ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {n}×
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Decoupled Action Buttons */}
             <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
@@ -700,7 +747,38 @@ export default function AgentSetup({ state, setState }: any) {
                       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Evaluation Verdicts ({state.verdicts.length})</h3>
                       <span className="text-xs text-slate-500">Click to expand step trace</span>
                     </div>
-                    
+
+                    {/* Feature 2: per-scenario pass-rate + flakiness summary */}
+                    {hasMultiSample && (
+                      <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+                        <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                          Reliability (pass-rate across samples)
+                        </div>
+                        <div className="space-y-1.5">
+                          {scenarioStats.map((s: any) => (
+                            <div key={s.scenario_id} className="flex items-center justify-between gap-2 text-xs">
+                              <span className="font-mono text-slate-300 truncate mr-2">{s.scenario_id}</span>
+                              <div className="flex items-center space-x-2 flex-shrink-0">
+                                {s.flaky && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                    ⚠ Flaky
+                                  </span>
+                                )}
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                  s.passRate === 1 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' :
+                                  s.passRate === 0 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' :
+                                  'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                                }`}>
+                                  {s.passes}/{s.total} · {Math.round(s.passRate * 100)}%
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                       {state.verdicts.map((v: any, idx: number) => {
                         const isPass = (v.outcome || v.verdict) === 'PASS';
