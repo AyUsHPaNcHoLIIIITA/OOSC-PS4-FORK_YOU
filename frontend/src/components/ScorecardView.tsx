@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getScorecard, badgeUrl } from '../api';
+import { getScorecard, badgeUrl, reportUrl, getReportMarkdown } from '../api';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import {
   ShieldCheck, AlertOctagon, AlertTriangle, CheckCircle, Info, Flame,
-  Cpu, Gauge, Zap, GitCompare, Rocket, Copy, Check, Terminal, Ban
+  Cpu, Gauge, Zap, GitCompare, Rocket, Copy, Check, Terminal, Ban,
+  FileText, FileDown
 } from 'lucide-react';
 
 export default function ScorecardView({ state }: any) {
@@ -17,6 +18,16 @@ export default function ScorecardView({ state }: any) {
       setCopied(key);
       setTimeout(() => setCopied(''), 1600);
     });
+  };
+
+  // Feature 4: fetch the server-rendered Markdown report and copy it in one click.
+  const copyReportMarkdown = async () => {
+    try {
+      const md = await getReportMarkdown(scorecard.agent_version);
+      copy(md, 'report-md');
+    } catch (e) {
+      console.error('Failed to fetch report markdown', e);
+    }
   };
 
   // Client-side mirror of backend evaluate_gate() — avoids an extra round-trip
@@ -115,6 +126,26 @@ jobs:
           <span className="text-sm font-mono text-indigo-300 font-bold bg-indigo-950/60 px-2.5 py-0.5 rounded border border-indigo-500/30">
             {scorecard.agent_version}
           </span>
+
+          {/* Feature 4: exportable report */}
+          <a
+            href={reportUrl(scorecard.agent_version)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="glass-btn text-xs text-slate-200 px-2.5 py-1 rounded-md flex items-center space-x-1.5 ml-1"
+            title="Open a printable HTML report in a new tab"
+          >
+            <FileDown className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Report</span>
+          </a>
+          <button
+            onClick={copyReportMarkdown}
+            className="glass-btn text-xs text-slate-200 px-2.5 py-1 rounded-md flex items-center space-x-1.5"
+            title="Copy the report as Markdown for a PR or issue"
+          >
+            {copied === 'report-md' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <FileText className="w-3.5 h-3.5 text-indigo-400" />}
+            <span>{copied === 'report-md' ? 'Copied!' : 'Copy as Markdown'}</span>
+          </button>
         </div>
 
         <div className="flex items-center space-x-3">

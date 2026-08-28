@@ -88,4 +88,17 @@ export const getCiGate = async (agentVersion: string, previousVersion?: string, 
 export const badgeUrl = (agentVersion: string) =>
   `${API_BASE_URL}/badge/${encodeURIComponent(agentVersion)}.svg`;
 
+// --- Feature 4: exportable report ---
+export const reportUrl = (agentVersion: string) =>
+  `${API_BASE_URL}/report/${encodeURIComponent(agentVersion)}.html`;
+
+// Fetch the Markdown flavor of the report (for one-click copy into a PR/issue).
+export const getReportMarkdown = async (agentVersion: string) => {
+  const res = await api.get(`/report/${encodeURIComponent(agentVersion)}.md`, {
+    responseType: 'text',
+    transformResponse: [(d) => d],
+  });
+  return res.data as string;
+};
+
 

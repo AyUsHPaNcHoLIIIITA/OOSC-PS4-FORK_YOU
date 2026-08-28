@@ -9,6 +9,7 @@ from app.classifier.judge import run_llm_judge
 from app.guardrail.scorer import compute_guardrail_metrics
 from app.scorecard.aggregator import generate_scorecard, evaluate_gate
 from app.scorecard.badge import build_badge_svg, badge_for_scorecard
+from app.scorecard.report import build_report_html, build_report_markdown
 from app.models.schema import Scenario, Run, Verdict, GuardrailMetric, Scorecard
 from sqlmodel import Session, select
 from app.database import engine
@@ -228,6 +229,18 @@ def get_badge(agent_version: str):
         media_type="image/svg+xml",
         headers={"Cache-Control": "no-cache, max-age=0"},
     )
+
+@router.get("/api/report/{agent_version}.html")
+def get_report_html(agent_version: str, previous_version: str = None):
+    """Feature 4: standalone printable HTML reliability report for a version."""
+    scorecard = generate_scorecard(agent_version, previous_version)
+    return Response(content=build_report_html(scorecard), media_type="text/html")
+
+@router.get("/api/report/{agent_version}.md")
+def get_report_markdown(agent_version: str, previous_version: str = None):
+    """Feature 4: Markdown flavor of the report for pasting into PRs / issues."""
+    scorecard = generate_scorecard(agent_version, previous_version)
+    return Response(content=build_report_markdown(scorecard), media_type="text/plain; charset=utf-8")
 
 class AgentAnalyzeRequest(BaseModel):
     system_prompt: str
