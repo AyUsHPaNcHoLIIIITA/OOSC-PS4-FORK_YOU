@@ -32,7 +32,7 @@ export default function ScorecardView({ state }: any) {
 
   if (!scorecard) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center max-w-lg mx-auto space-y-4 shadow-sm">
+      <div className="glass rounded-xl p-12 text-center max-w-lg mx-auto space-y-4 shadow-sm">
         <Cpu className="w-12 h-12 text-slate-600 mx-auto" />
         <h3 className="text-lg font-bold text-white">No Scorecard Generated Yet</h3>
         <p className="text-sm text-slate-400">
@@ -55,7 +55,7 @@ export default function ScorecardView({ state }: any) {
   return (
     <div className="space-y-8">
       {/* Version Regression Comparison Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="glass rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center space-x-2">
           <GitCompare className="w-5 h-5 text-indigo-400" />
           <span className="text-sm font-bold text-white">Active Version:</span>
@@ -71,7 +71,7 @@ export default function ScorecardView({ state }: any) {
             placeholder="e.g. devops_bot_v1"
             value={compareVersion}
             onChange={(e) => setCompareVersion(e.target.value)}
-            className="bg-slate-950 border border-slate-700 text-xs text-slate-200 px-3 py-1.5 rounded-lg font-mono focus:outline-none focus:border-indigo-500 w-40"
+            className="glass-dark text-xs text-slate-200 px-3 py-1.5 rounded-lg font-mono focus:outline-none focus:border-indigo-500 w-40"
           />
           {compareVersion && (
             <button
@@ -85,7 +85,7 @@ export default function ScorecardView({ state }: any) {
       </div>
 
       {/* 1. Critical Safety Gate Banner */}
-      <div className={`rounded-xl p-6 border shadow-lg transition-all ${
+      <div className={`rounded-xl p-6 border shadow-lg transition-all backdrop-blur-xl ${
         isUnsafe ? 'bg-rose-950/40 border-rose-500/80 shadow-rose-950/50' :
         isIncomplete ? 'bg-amber-950/40 border-amber-500/80 shadow-amber-950/50' :
         isReview ? 'bg-yellow-950/40 border-yellow-500/80 shadow-yellow-950/50' :
@@ -143,7 +143,7 @@ export default function ScorecardView({ state }: any) {
 
       {/* Regressions Section if comparing */}
       {compareVersion && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm space-y-4">
+        <div className="glass rounded-xl p-6 shadow-sm space-y-4">
           <h3 className="text-base font-bold text-white flex items-center space-x-2">
             <GitCompare className="text-indigo-400 w-5 h-5" />
             <span>Version Regression Analysis: {scorecard.agent_version} vs {compareVersion}</span>
@@ -183,7 +183,7 @@ export default function ScorecardView({ state }: any) {
           const score = scorecard.sub_scores?.[sub.key] ?? 100;
           const Icon = sub.icon;
           return (
-            <div key={sub.key} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-2">
+            <div key={sub.key} className="glass rounded-xl p-4 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
                 <Icon className={`w-4 h-4 ${sub.color}`} />
                 <span className="text-[10px] text-slate-500 font-mono">Weight: {sub.weight}</span>
@@ -204,7 +204,7 @@ export default function ScorecardView({ state }: any) {
       {/* 3. Capability Radar & Guardrail Metric Table */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Radar Chart */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+        <div className="glass rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold flex items-center space-x-2 text-white">
               <CheckCircle className="text-emerald-400 w-5 h-5" />
@@ -226,7 +226,7 @@ export default function ScorecardView({ state }: any) {
         </div>
 
         {/* Destructive Action Guardrail Table */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="glass rounded-xl p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold flex items-center space-x-2 text-white">

@@ -1,7 +1,126 @@
 @import "tailwindcss";
 
 @layer base {
+  html { color-scheme: dark; }
+
   body {
-    @apply bg-slate-950 text-slate-200;
+    @apply text-slate-200;
+    min-height: 100vh;
+    /* Ambient gradient mesh — matches the AgentCI pitch deck palette so the
+       product and the deck read as one brand. */
+    background:
+      radial-gradient(1100px 760px at 82% -8%, rgba(139, 92, 255, .20), transparent 55%),
+      radial-gradient(920px 680px at -6% 108%, rgba(53, 214, 238, .14), transparent 55%),
+      radial-gradient(760px 620px at 50% 122%, rgba(255, 106, 193, .10), transparent 60%),
+      #070b16;
+    background-attachment: fixed;
+  }
+
+  /* Faint grid for depth behind the glass. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: .4;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, .03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, .03) 1px, transparent 1px);
+    background-size: 46px 46px;
+    -webkit-mask-image: radial-gradient(circle at 50% 28%, black, transparent 80%);
+    mask-image: radial-gradient(circle at 50% 28%, black, transparent 80%);
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Slim, on-brand scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 255, .35) transparent;
+  }
+  *::-webkit-scrollbar { width: 9px; height: 9px; }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 255, .35);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 255, .55); background-clip: padding-box; }
+}
+
+@layer components {
+  /* Frosted glass surface for primary panels. !important so leftover Tailwind
+     shadow/bg utilities on the same element cannot override the look. */
+  .glass {
+    background: linear-gradient(150deg, rgba(255, 255, 255, .065), rgba(255, 255, 255, .02)) !important;
+    border: 1px solid rgba(255, 255, 255, .10) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+    box-shadow:
+      0 10px 34px -12px rgba(0, 0, 0, .55),
+      inset 0 1px 0 rgba(255, 255, 255, .08) !important;
+  }
+
+  /* Indigo-tinted glass for the "active / highlighted" panel. Declared after
+     .glass so it wins when an element has both classes. */
+  .glass-accent {
+    background: linear-gradient(150deg, rgba(139, 92, 255, .16), rgba(139, 92, 255, .035)) !important;
+    border: 1px solid rgba(139, 92, 255, .45) !important;
+    box-shadow:
+      0 10px 34px -12px rgba(0, 0, 0, .55),
+      0 0 26px -6px rgba(139, 92, 255, .38),
+      inset 0 1px 0 rgba(255, 255, 255, .10) !important;
+  }
+
+  /* Sticky translucent nav. */
+  .glass-nav {
+    background: rgba(9, 12, 24, .6) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+  }
+
+  /* Recessed darker glass for inputs / wells. */
+  .glass-dark {
+    background: rgba(4, 8, 20, .55) !important;
+    border: 1px solid rgba(255, 255, 255, .08) !important;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  .glass-dark:focus {
+    border-color: rgba(139, 92, 255, .6) !important;
+    outline: none;
+  }
+
+  /* Frosted secondary button. */
+  .glass-btn {
+    background: linear-gradient(150deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02)) !important;
+    border: 1px solid rgba(255, 255, 255, .12) !important;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transition: transform .2s ease, border-color .2s ease, background .2s ease;
+  }
+  .glass-btn:hover:not(:disabled) {
+    background: linear-gradient(150deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .05)) !important;
+    border-color: rgba(139, 92, 255, .5) !important;
+    transform: translateY(-1px);
+  }
+
+  /* Glow for the primary CTA. */
+  .glow-cta {
+    box-shadow:
+      0 12px 34px -8px rgba(124, 58, 237, .6),
+      inset 0 1px 0 rgba(255, 255, 255, .12) !important;
+    transition: box-shadow .25s ease, transform .2s ease;
+  }
+  .glow-cta:hover:not(:disabled) {
+    box-shadow:
+      0 16px 44px -8px rgba(124, 58, 237, .85),
+      inset 0 1px 0 rgba(255, 255, 255, .16) !important;
+    transform: translateY(-1px);
   }
 }

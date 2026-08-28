@@ -384,7 +384,7 @@ export default function AgentSetup({ state, setState }: any) {
   return (
     <div className="space-y-8">
       {/* Header & Presets */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+      <div className="glass rounded-xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
@@ -399,31 +399,31 @@ export default function AgentSetup({ state, setState }: any) {
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 mr-1">Presets:</span>
             <button
               onClick={() => loadPreset('banking_v1')}
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
+              className="text-xs glass-btn text-cyan-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
               🏦 Banking v1 (Vulnerable)
             </button>
             <button
               onClick={() => loadPreset('banking_v2')}
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
+              className="text-xs glass-btn text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
               🛡️ Banking v2 (Hardened)
             </button>
             <button
               onClick={() => loadPreset('devops_v1')}
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
+              className="text-xs glass-btn text-indigo-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
               🛠️ DevOps Bot
             </button>
             <button
               onClick={() => loadPreset('support_v1')}
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
+              className="text-xs glass-btn text-amber-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
               🛍️ Support v1
             </button>
             <button
               onClick={() => loadPreset('support_v2')}
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
+              className="text-xs glass-btn text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
               🛡️ Support v2
             </button>
@@ -435,7 +435,7 @@ export default function AgentSetup({ state, setState }: any) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Agent Definition */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm space-y-4">
+          <div className="glass rounded-xl p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold flex items-center space-x-2 text-white">
                 <Cpu className="text-indigo-400 w-5 h-5" />
@@ -456,7 +456,7 @@ export default function AgentSetup({ state, setState }: any) {
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Agent Version ID</label>
                 <input
                   type="text"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full glass-dark rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
                   value={state.agentVersion || ''}
                   onChange={e => setState({ ...state, agentVersion: e.target.value })}
                 />
@@ -465,7 +465,7 @@ export default function AgentSetup({ state, setState }: any) {
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Task Domain</label>
                 <input
                   type="text"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full glass-dark rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
                   value={agentDomain}
                   onChange={e => setAgentDomain(e.target.value)}
                 />
@@ -476,7 +476,7 @@ export default function AgentSetup({ state, setState }: any) {
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">System Prompt</label>
               <textarea
                 rows={4}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed"
+                className="w-full glass-dark rounded-lg p-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed"
                 value={state.systemPrompt || ''}
                 onChange={e => setState({ ...state, systemPrompt: e.target.value })}
                 placeholder="You are an autonomous agent..."
@@ -487,7 +487,7 @@ export default function AgentSetup({ state, setState }: any) {
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Tools Definition (JSON)</label>
               <textarea
                 rows={5}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full glass-dark rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
                 value={typeof state.tools === 'string' ? state.tools : JSON.stringify(state.tools, null, 2)}
                 onChange={e => setState({ ...state, tools: e.target.value })}
               />
@@ -496,7 +496,7 @@ export default function AgentSetup({ state, setState }: any) {
 
           {/* Dynamic Capability & Threat Surface Analysis Card */}
           {analysis && (
-            <div className="bg-slate-900 border border-indigo-500/40 rounded-xl p-6 shadow-md space-y-4">
+            <div className="glass glass-accent rounded-xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <BrainCircuit className="text-indigo-400 w-5 h-5" />
@@ -557,7 +557,7 @@ export default function AgentSetup({ state, setState }: any) {
           )}
 
           {/* Test Matrix & Decoupled Stage Controls */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm space-y-4">
+          <div className="glass rounded-xl p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold flex items-center space-x-2 text-white">
                 <Target className="text-rose-400 w-5 h-5" />
@@ -610,7 +610,7 @@ export default function AgentSetup({ state, setState }: any) {
               <button
                 onClick={handleGenerateScenariosOnly}
                 disabled={generating || loading}
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center space-x-2 transition-colors text-xs"
+                className="glass-btn text-slate-200 font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center space-x-2 transition-colors text-xs"
               >
                 {generating ? <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" /> : <ListFilter className="w-4 h-4 text-indigo-400" />}
                 <span>2. Generate Tests Only</span>
@@ -619,7 +619,7 @@ export default function AgentSetup({ state, setState }: any) {
               <button
                 onClick={handleExecuteOnly}
                 disabled={loading || !state.scenarios?.length}
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 disabled:opacity-40 font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center space-x-2 transition-colors text-xs"
+                className="glass-btn text-slate-200 disabled:opacity-40 font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center space-x-2 transition-colors text-xs"
               >
                 <Play className="w-4 h-4 text-emerald-400" />
                 <span>3. Execute in Sandbox ({state.scenarios?.length || 0})</span>
@@ -630,7 +630,7 @@ export default function AgentSetup({ state, setState }: any) {
             <button
               onClick={handleFullAutoPipeline}
               disabled={loading || analyzing || generating}
-              className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 hover:from-indigo-500 hover:to-rose-500 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-all shadow-lg shadow-indigo-500/25"
+              className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 hover:from-indigo-500 hover:to-rose-500 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 glow-cta"
             >
               {loading ? (
                 <>
@@ -649,7 +649,7 @@ export default function AgentSetup({ state, setState }: any) {
 
         {/* Right Column: Console & Traces & Scenarios */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm flex flex-col h-full min-h-[550px]">
+          <div className="glass rounded-xl p-6 shadow-sm flex flex-col h-full min-h-[550px]">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
                 <button
@@ -761,7 +761,7 @@ export default function AgentSetup({ state, setState }: any) {
                                   handleReplay(v.run_id);
                                 }}
                                 disabled={replayingRunId === v.run_id}
-                                className="text-[11px] bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-2.5 py-1 rounded flex items-center space-x-1.5 transition-colors"
+                                className="text-[11px] glass-btn text-indigo-300 border border-slate-700 px-2.5 py-1 rounded flex items-center space-x-1.5 transition-colors"
                               >
                                 <RotateCcw className={`w-3 h-3 ${replayingRunId === v.run_id ? 'animate-spin' : ''}`} />
                                 <span>{replayingRunId === v.run_id ? 'Replaying...' : 'Deterministic Replay'}</span>

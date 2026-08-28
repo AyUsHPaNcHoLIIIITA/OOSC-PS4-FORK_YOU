@@ -16,8 +16,8 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
-        <nav className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50 shadow-lg">
+      <div className="min-h-screen text-slate-200 font-sans selection:bg-indigo-500/30">
+        <nav className="glass-nav p-4 sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <ShieldAlert className="text-rose-500 w-6 h-6" />
