@@ -101,4 +101,33 @@ export const getReportMarkdown = async (agentVersion: string) => {
   return res.data as string;
 };
 
+// --- Feature 3: Threat Library + Leaderboard ---
+export const addToLibrary = async (agentVersion?: string, scenarioIds?: string[]) => {
+  const res = await api.post('/library/add', {
+    agent_version: agentVersion,
+    scenario_ids: scenarioIds,
+  });
+  return res.data;
+};
+
+export const listLibrary = async () => {
+  const res = await api.get('/library/list');
+  return res.data;
+};
+
+export const runLibrary = async (agentVersion: string, systemPrompt: string, tools: any[], entryIds?: string[]) => {
+  const res = await api.post('/library/run', {
+    agent_version: agentVersion,
+    system_prompt: systemPrompt,
+    tools,
+    entry_ids: entryIds,
+  });
+  return res.data;
+};
+
+export const getLeaderboard = async () => {
+  const res = await api.get('/leaderboard');
+  return res.data;
+};
+
 

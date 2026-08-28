@@ -10,7 +10,8 @@ from app.guardrail.scorer import compute_guardrail_metrics
 from app.scorecard.aggregator import generate_scorecard, evaluate_gate
 from app.scorecard.badge import build_badge_svg, badge_for_scorecard
 from app.scorecard.report import build_report_html, build_report_markdown
-from app.models.schema import Scenario, Run, Verdict, GuardrailMetric, Scorecard
+from app.models.schema import Scenario, Run, Verdict, GuardrailMetric, Scorecard, LibraryEntry
+import uuid
 from sqlmodel import Session, select
 from app.database import engine
 
@@ -298,5 +299,152 @@ def auto_generate_scenarios_endpoint(req: AutoGenerateRequest):
     except Exception as e:
         print("Auto-Generate Error:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Feature 3: Threat Library + Leaderboard
+# ---------------------------------------------------------------------------
+
+class LibraryAddRequest(BaseModel):
+    agent_version: Optional[str] = None
+    scenario_ids: Optional[List[str]] = None  # if omitted, derive from failing verdicts
+
+@router.post("/api/library/add", response_model=List[LibraryEntry])
+def library_add(req: LibraryAddRequest):
+    """Save attacks into the reusable Threat Library. Either an explicit list of
+    scenario_ids, or (default) every scenario that FAILED for a given agent
+    version. Idempotent per source scenario — re-adding is a no-op."""
+    with Session(engine) as session:
+        scenario_ids = req.scenario_ids
+        if not scenario_ids:
+            if not req.agent_version:
+                raise HTTPException(status_code=400, detail="Provide scenario_ids or agent_version")
+            run_ids = [r.run_id for r in session.exec(
+                select(Run).where(Run.agent_version == req.agent_version)).all()]
+            fails = session.exec(select(Verdict).where(Verdict.run_id.in_(run_ids))).all() if run_ids else []
+            scenario_ids = list({v.scenario_id for v in fails
+                                 if v.outcome == "FAIL" and v.failure_category != "evaluation_error"})
+
+        created: List[LibraryEntry] = []
+        for sid in scenario_ids:
+            scenario = session.exec(select(Scenario).where(Scenario.scenario_id == sid)).first()
+            if not scenario:
+                continue
+            existing = session.exec(select(LibraryEntry).where(
+                LibraryEntry.source_scenario_id == sid)).first()
+            if existing:
+                continue
+            entry = LibraryEntry(
+                entry_id=f"lib-{uuid.uuid4().hex[:12]}",
+                title=f"{scenario.category} · {scenario.target_tool or scenario.agent_domain}",
+                agent_domain=scenario.agent_domain,
+                category=scenario.category,
+                severity=scenario.severity,
+                target_tool=scenario.target_tool,
+                pressure_technique=scenario.pressure_technique,
+                turns=scenario.turns,
+                scripted_responses=scenario.scripted_responses,
+                safe_behavior=scenario.safe_behavior,
+                unsafe_behavior=scenario.unsafe_behavior,
+                source_agent_version=req.agent_version,
+                source_scenario_id=sid,
+            )
+            session.add(entry)
+            created.append(entry)
+        session.commit()
+        for e in created:
+            session.refresh(e)
+        return created
+
+@router.get("/api/library/list", response_model=List[LibraryEntry])
+def library_list():
+    with Session(engine) as session:
+        return session.exec(select(LibraryEntry)).all()
+
+class LibraryRunRequest(BaseModel):
+    agent_version: str
+    system_prompt: str
+    tools: List[Dict[str, Any]]
+    entry_ids: Optional[List[str]] = None  # if omitted, run the whole library
+
+@router.post("/api/library/run")
+async def library_run(req: LibraryRunRequest):
+    """Re-run saved Threat Library attacks against an agent version as a
+    regression suite, then classify and return verdicts + a fresh scorecard."""
+    try:
+        with Session(engine) as session:
+            q = select(LibraryEntry)
+            if req.entry_ids:
+                q = q.where(LibraryEntry.entry_id.in_(req.entry_ids))
+            entries = session.exec(q).all()
+            if not entries:
+                raise HTTPException(status_code=404, detail="No matching library entries")
+
+            # Materialize each entry as a Scenario row (create once, then reuse).
+            scenario_ids: List[str] = []
+            for e in entries:
+                sid = e.source_scenario_id or e.entry_id
+                existing = session.exec(select(Scenario).where(Scenario.scenario_id == sid)).first()
+                if not existing:
+                    session.add(Scenario(
+                        scenario_id=sid,
+                        agent_domain=e.agent_domain,
+                        category=e.category,
+                        target_tool=e.target_tool,
+                        pressure_technique=e.pressure_technique,
+                        turns=e.turns,
+                        scripted_responses=e.scripted_responses,
+                        safe_behavior=e.safe_behavior,
+                        unsafe_behavior=e.unsafe_behavior,
+                        severity=e.severity,
+                    ))
+                scenario_ids.append(sid)
+            session.commit()
+
+        runs = await execute_scenarios(
+            scenario_ids=scenario_ids,
+            agent_version=req.agent_version,
+            system_prompt=req.system_prompt,
+            tool_schemas=req.tools,
+        )
+        verdicts = []
+        with Session(engine) as session:
+            for run in runs:
+                scenario = session.exec(select(Scenario).where(Scenario.scenario_id == run.scenario_id)).first()
+                if not scenario:
+                    continue
+                verdict = run_rule_based_checks(run, scenario, req.tools)
+                if not verdict:
+                    verdict = run_llm_judge(run, scenario)
+                session.add(verdict)
+                verdicts.append(verdict)
+            session.commit()
+            for v in verdicts:
+                session.refresh(v)
+
+        scorecard = generate_scorecard(req.agent_version)
+        return {"verdicts": verdicts, "scorecard": scorecard}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Library Run Error:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/leaderboard")
+def leaderboard():
+    """Rank every evaluated agent version by its current reliability scorecard."""
+    with Session(engine) as session:
+        versions = list({r.agent_version for r in session.exec(select(Run)).all()})
+    board = []
+    for v in versions:
+        sc = generate_scorecard(v)
+        board.append({
+            "agent_version": v,
+            "overall_score": sc.overall_score,
+            "safety_status": sc.safety_status,
+            "critical_guardrail_failures": sc.critical_guardrail_failures,
+        })
+    board.sort(key=lambda x: (x["overall_score"], x["safety_status"] == "PRODUCTION_READY"), reverse=True)
+    return board
 
 

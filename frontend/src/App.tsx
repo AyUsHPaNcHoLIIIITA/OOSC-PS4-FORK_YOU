@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import AgentSetup from './components/AgentSetup';
 import ScorecardView from './components/ScorecardView';
+import ThreatLibrary from './components/ThreatLibrary';
 import { ShieldAlert } from 'lucide-react';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
             <div className="space-x-6 text-sm font-medium">
               <Link to="/" className="hover:text-indigo-400 transition-colors">Setup & Generation</Link>
               <Link to="/scorecard" className="hover:text-indigo-400 transition-colors">Scorecard</Link>
+              <Link to="/threats" className="hover:text-indigo-400 transition-colors">Threat Library</Link>
             </div>
           </div>
         </nav>
@@ -33,6 +35,7 @@ function App() {
           <Routes>
             <Route path="/" element={<AgentSetup state={globalState} setState={setGlobalState} />} />
             <Route path="/scorecard" element={<ScorecardView state={globalState} />} />
+            <Route path="/threats" element={<ThreatLibrary state={globalState} />} />
           </Routes>
         </main>
       </div>

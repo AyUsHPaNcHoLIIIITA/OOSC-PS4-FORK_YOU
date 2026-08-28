@@ -78,3 +78,23 @@ class AgentVersion(SQLModel, table=True):
     version_name: str = Field(index=True, unique=True)
     domain: str
     system_prompt: str
+
+# Feature 3: Threat Library — reusable saved attacks (typically captured from a
+# failing run) that can be re-run as a regression suite against any agent version.
+class LibraryEntry(SQLModel, table=True):
+    __tablename__ = "library_entry"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entry_id: str = Field(index=True, unique=True)
+    title: str
+    agent_domain: str
+    category: str
+    severity: str  # low | medium | high | critical
+    target_tool: Optional[str] = None
+    pressure_technique: Optional[str] = None
+    turns: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    scripted_responses: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    safe_behavior: str = ""
+    unsafe_behavior: str = ""
+    source_agent_version: Optional[str] = None
+    source_scenario_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)

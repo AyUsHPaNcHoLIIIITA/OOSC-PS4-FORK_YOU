@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  generateScenarios, executeRuns, classifyRuns, analyzeAgent, 
-  autoGenerateScenarios, replayRun 
+import {
+  generateScenarios, executeRuns, classifyRuns, analyzeAgent,
+  autoGenerateScenarios, replayRun, addToLibrary
 } from '../api';
-import { 
-  Play, Cpu, Sparkles, CheckCircle2, XCircle, ChevronDown, ChevronRight, 
-  RefreshCw, BrainCircuit, AlertOctagon, Flame, Target, Wand2, 
-  RotateCcw, ListFilter
+import {
+  Play, Cpu, Sparkles, CheckCircle2, XCircle, ChevronDown, ChevronRight,
+  RefreshCw, BrainCircuit, AlertOctagon, Flame, Target, Wand2,
+  RotateCcw, ListFilter, Library
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -207,6 +207,7 @@ export default function AgentSetup({ state, setState }: any) {
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [replayingRunId, setReplayingRunId] = useState<string | null>(null);
+  const [savingLibrary, setSavingLibrary] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [agentDomain, setAgentDomain] = useState('devops');
@@ -382,6 +383,26 @@ export default function AgentSetup({ state, setState }: any) {
       addLog("❌ Replay Error: " + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
     }
     setReplayingRunId(null);
+  };
+
+  // Feature 3: persist every failing scenario into the reusable Threat Library so
+  // it can be re-run as a regression suite against future agent versions.
+  const handleAddToLibrary = async () => {
+    const failing = (state.verdicts || []).filter((v: any) => (v.outcome || v.verdict) === 'FAIL');
+    const scenarioIds = Array.from(new Set(failing.map((v: any) => v.scenario_id))) as string[];
+    if (scenarioIds.length === 0) {
+      addLog('ℹ️ No failing attacks to save to the library.');
+      return;
+    }
+    setSavingLibrary(true);
+    try {
+      const created = await addToLibrary(state.agentVersion, scenarioIds);
+      addLog(`📚 Saved ${created.length} attack(s) to the Threat Library (${scenarioIds.length} failing scenario(s) submitted).`);
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.detail || e.message;
+      addLog('❌ Library Error: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
+    }
+    setSavingLibrary(false);
   };
 
   // Feature 2: collapse repeated samples of the same scenario into a pass-rate.
@@ -745,7 +766,18 @@ export default function AgentSetup({ state, setState }: any) {
                   <div className="mt-6 border-t border-slate-800 pt-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Evaluation Verdicts ({state.verdicts.length})</h3>
-                      <span className="text-xs text-slate-500">Click to expand step trace</span>
+                      {state.verdicts.some((v: any) => (v.outcome || v.verdict) === 'FAIL') ? (
+                        <button
+                          onClick={handleAddToLibrary}
+                          disabled={savingLibrary}
+                          className="text-[11px] glass-btn text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded flex items-center space-x-1.5 transition-colors"
+                        >
+                          <Library className={`w-3 h-3 ${savingLibrary ? 'animate-pulse' : ''}`} />
+                          <span>{savingLibrary ? 'Saving...' : '➕ Add failing attacks to library'}</span>
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-500">Click to expand step trace</span>
+                      )}
                     </div>
 
                     {/* Feature 2: per-scenario pass-rate + flakiness summary */}
