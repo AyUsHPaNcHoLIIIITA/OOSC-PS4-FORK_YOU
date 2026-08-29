@@ -274,7 +274,7 @@ export default function AgentSetup({ state, setState }: any) {
   };
 
   const toggleCategory = (catId: string) => {
-    setSelectedCounts(prev => {
+    setSelectedCounts((prev: Record<string, number>) => {
       const next = { ...prev };
       if (next[catId]) {
         delete next[catId];
@@ -286,7 +286,7 @@ export default function AgentSetup({ state, setState }: any) {
   };
 
   const updateCount = (catId: string, count: number) => {
-    setSelectedCounts(prev => ({
+    setSelectedCounts((prev: Record<string, number>) => ({
       ...prev,
       [catId]: Math.max(1, count)
     }));
