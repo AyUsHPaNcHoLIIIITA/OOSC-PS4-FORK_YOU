@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import AgentSetup from './components/AgentSetup';
 import ScorecardView from './components/ScorecardView';
 import ThreatLibrary from './components/ThreatLibrary';
+import BrainHero from './components/BrainHero';
 import { ShieldAlert } from 'lucide-react';
 
 // Lazy so the WebGL view (three.js, loaded from CDN) never weighs down the
@@ -35,7 +36,7 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen text-slate-200 font-sans selection:bg-indigo-500/30">
+      <div className="min-h-screen overflow-x-hidden text-slate-200 font-sans selection:bg-indigo-500/30">
         <nav className="glass-nav p-4 sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -52,7 +53,17 @@ function App() {
         </nav>
         <main className="max-w-6xl mx-auto p-6">
           <Routes>
-            <Route path="/" element={<AgentSetup state={globalState} setState={setGlobalState} />} />
+            <Route
+              path="/"
+              element={
+                <>
+                  <BrainHero />
+                  <div id="app-start" className="scroll-mt-24">
+                    <AgentSetup state={globalState} setState={setGlobalState} />
+                  </div>
+                </>
+              }
+            />
             <Route path="/scorecard" element={<ScorecardView state={globalState} />} />
             <Route
               path="/pipeline"
