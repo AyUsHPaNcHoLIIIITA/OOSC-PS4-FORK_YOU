@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import AgentSetup from './components/AgentSetup';
 import ScorecardView from './components/ScorecardView';
 import ThreatLibrary from './components/ThreatLibrary';
 import { ShieldAlert } from 'lucide-react';
+
+// Lazy so the WebGL view (three.js, loaded from CDN) never weighs down the
+// initial bundle — it's only fetched when the user opens the 3D Pipeline tab.
+const PipelineView3D = lazy(() => import('./components/PipelineView3D'));
 
 function App() {
   const [globalState, setGlobalState] = useState<any>({
@@ -41,6 +45,7 @@ function App() {
             <div className="space-x-6 text-sm font-medium">
               <Link to="/" className="hover:text-indigo-400 transition-colors">Setup & Generation</Link>
               <Link to="/scorecard" className="hover:text-indigo-400 transition-colors">Scorecard</Link>
+              <Link to="/pipeline" className="hover:text-indigo-400 transition-colors">3D Pipeline</Link>
               <Link to="/threats" className="hover:text-indigo-400 transition-colors">Threat Library</Link>
             </div>
           </div>
@@ -49,6 +54,14 @@ function App() {
           <Routes>
             <Route path="/" element={<AgentSetup state={globalState} setState={setGlobalState} />} />
             <Route path="/scorecard" element={<ScorecardView state={globalState} />} />
+            <Route
+              path="/pipeline"
+              element={
+                <Suspense fallback={<div className="text-center p-16 text-slate-400 font-mono">Loading 3D pipeline…</div>}>
+                  <PipelineView3D state={globalState} />
+                </Suspense>
+              }
+            />
             <Route path="/threats" element={<ThreatLibrary state={globalState} />} />
           </Routes>
         </main>
