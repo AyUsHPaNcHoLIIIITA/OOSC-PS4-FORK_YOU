@@ -17,8 +17,17 @@ export default function BrainHero() {
   const mountRef = useRef<HTMLDivElement | null>(null); // canvas host
   const copyRef = useRef<HTMLDivElement | null>(null);  // headline overlay (fades on scroll)
   const [failed, setFailed] = useState(false);
+  // Respect prefers-reduced-motion: skip WebGL + scroll-pinning entirely and show
+  // the static on-brand glow instead (also drives the shorter 100vh layout).
+  const [reduced] = useState(
+    () => typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  const staticHero = failed || reduced;
 
   useEffect(() => {
+    if (reduced) return; // static hero — no canvas, no listeners, no RAF loop
     let disposed = false;
     let cleanup = () => {};
 
@@ -90,8 +99,9 @@ export default function BrainHero() {
         return { pos: [x, y, z], fold: f };
       };
 
-      const CORTEX = 20000;
-      const CEREB = 3000;
+      const small = window.innerWidth < 640;      // lighter cloud on phones
+      const CORTEX = small ? 9000 : 20000;
+      const CEREB = small ? 1400 : 3000;
       const TOTAL = CORTEX + CEREB;
       const positions = new Float32Array(TOTAL * 3);
       const colors = new Float32Array(TOTAL * 3);
@@ -210,7 +220,11 @@ export default function BrainHero() {
         const el = wrapRef.current; if (!el) return;
         const span = el.offsetHeight - window.innerHeight;
         progress = span > 0 ? clamp(-el.getBoundingClientRect().top / span, 0, 1) : 0;
-        if (copyRef.current) copyRef.current.style.opacity = String(clamp(1 - progress / 0.4, 0, 1));
+        if (copyRef.current) {
+          const cp = clamp(1 - progress / 0.34, 0, 1);
+          copyRef.current.style.opacity = String(cp);
+          copyRef.current.style.transform = `translateY(${(-progress * 60).toFixed(1)}px)`;
+        }
       };
       window.addEventListener('scroll', onScroll, { passive: true });
       onScroll();
@@ -219,12 +233,16 @@ export default function BrainHero() {
       let raf = 0;
       const animate = () => {
         raf = requestAnimationFrame(animate);
-        // fade the whole canvas out over the last stretch so the dashboard reveals
-        const canvasOp = 1 - clamp((progress - 0.6) / 0.4, 0, 1);
+        // ease-in the fly-through so the handoff to the dashboard feels like a
+        // deliberate dive rather than a linear scrub, and fade the canvas out over
+        // the last stretch so the dashboard reveals underneath it.
+        const eased = progress * progress;
+        const canvasOp = 1 - clamp((progress - 0.55) / 0.4, 0, 1);
         renderer.domElement.style.opacity = String(canvasOp);
         if (canvasOp <= 0.01) return; // fully hidden — skip the draw
         const t = clock.getElapsedTime();
-        camera.position.z = 3.6 - progress * 2.0; // dolly "through" the brain
+        camera.position.z = 3.6 - eased * 2.8;   // dolly "through" the brain
+        group.scale.setScalar(1 + eased * 0.55); // and swell as we dive in
         group.rotation.y += (targetRY - group.rotation.y) * 0.05 + 0.0012;
         group.rotation.x += (targetRX - group.rotation.x) * 0.05;
         group.position.y = Math.sin(t * 0.5) * 0.025;
@@ -275,11 +293,11 @@ export default function BrainHero() {
   return (
     // Tall spacer pins the canvas: as it scrolls through, `progress` dollies the
     // camera into the brain and fades the canvas out, revealing the dashboard.
-    <div ref={wrapRef} className="relative" style={{ height: failed ? '100vh' : '220vh' }}>
+    <div ref={wrapRef} className="relative" style={{ height: staticHero ? '100vh' : '185vh' }}>
       <div className="sticky top-0 h-screen overflow-hidden">
         <div ref={mountRef} className="absolute inset-0" />
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,rgba(79,70,229,0.14),transparent_60%)]" />
-        {failed && (
+        {staticHero && (
           // CSS-only fallback if WebGL / the CDN is unavailable — never blank.
           <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_42%,rgba(251,113,133,0.2),rgba(79,70,229,0.16)_42%,transparent_72%)]" />
         )}
@@ -287,14 +305,17 @@ export default function BrainHero() {
           ref={copyRef}
           className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 pointer-events-none"
         >
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight">
+          <div className="mb-5 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-indigo-300/80">
+            Adversarial Agent Reliability
+          </div>
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.05]">
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-rose-400 via-fuchsia-400 to-indigo-400">
-              Test your agent.
+              Break your agent<br className="hidden sm:block" /> before your users do.
             </span>
           </h1>
-          <p className="mt-5 max-w-xl text-slate-300/90 text-base sm:text-lg leading-relaxed">
-            Adversarial reliability testing for AI agents — probe prompt injection, destructive
-            actions, and data disclosure before they ever act for real.
+          <p className="mt-6 max-w-xl text-slate-300/90 text-base sm:text-lg leading-relaxed">
+            AgentCI stress-tests AI agents against prompt injection, destructive tool calls, and
+            data-leak traps — so failures surface here, not in production.
           </p>
           <button
             onClick={scrollToApp}

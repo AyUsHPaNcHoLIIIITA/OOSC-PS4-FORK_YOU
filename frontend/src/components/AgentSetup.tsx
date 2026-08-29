@@ -457,16 +457,52 @@ export default function AgentSetup({ state, setState }: any) {
 
   return (
     <div className="space-y-8">
+      {/* Intro band — carries the hero's visual language into the console so the
+          fold isn't a quality cliff: gradient headline + pillar chips. */}
+      <div className="glass-accent rounded-2xl px-6 py-8 sm:px-8 sm:py-10 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top_left,rgba(251,113,133,0.12),transparent_55%)]" />
+        <div className="relative">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-300/80">
+            The Reliability Console
+          </div>
+          <h1 className="mt-3 text-3xl sm:text-4xl font-black tracking-tight leading-[1.1]">
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-rose-400 via-fuchsia-400 to-indigo-400">
+              Put your agent under adversarial fire.
+            </span>
+          </h1>
+          <p className="mt-3 max-w-2xl text-slate-300/90 text-sm sm:text-base leading-relaxed">
+            Define the agent, auto-discover its threat surface, then run the full sandboxed
+            pipeline — prompt injection, destructive tool calls, and data-leak traps, judged and
+            replayable.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {[
+              'Dynamic Threat Surface Discovery',
+              'Stateful Sandbox Harness',
+              'Structured LLM Judge',
+              'Deterministic Replay',
+            ].map((pillar) => (
+              <span
+                key={pillar}
+                className="text-[11px] font-medium text-slate-300 glass-btn border border-slate-700/70 px-3 py-1.5 rounded-full"
+              >
+                {pillar}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Header & Presets */}
       <div className="glass rounded-xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <Sparkles className="text-indigo-400 w-6 h-6" />
-              <h1 className="text-2xl font-bold text-white">Agent Reliability Engine (AgentCI)</h1>
+              <Sparkles className="text-indigo-400 w-5 h-5" />
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300">Start from a preset agent</h2>
             </div>
-            <p className="text-slate-400 text-sm mt-1">
-              Dynamic Threat Surface Discovery • Stateful Sandbox Harness • Structured LLM Judge • Deterministic Replay
+            <p className="text-slate-500 text-xs mt-1">
+              Load a vulnerable or hardened definition, or configure your own below.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
