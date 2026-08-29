@@ -45,8 +45,21 @@ def get_model_name() -> str:
     return os.environ.get("MODEL_NAME", DEFAULT_MODEL)
 
 
+def _base_url() -> str:
+    """Base URL for the backend evaluator LLM (generator / analyzer / judge).
+
+    Defaults to Groq. Override with LLM_BASE_URL to point the evaluator at any
+    other OpenAI-compatible gateway (e.g. when the Groq quota is exhausted). The
+    OpenAI SDK appends ``/chat/completions`` to this, so include the API path the
+    gateway expects (commonly a trailing ``/v1``). Only the base endpoint changes;
+    the evaluator still runs on the backend's own credentials, independent of any
+    user-supplied model-under-test.
+    """
+    return os.environ.get("LLM_BASE_URL", GROQ_BASE_URL).strip().rstrip("/")
+
+
 def _api_key() -> Optional[str]:
-    return os.environ.get("GROQ_API_KEY")
+    return os.environ.get("LLM_API_KEY") or os.environ.get("GROQ_API_KEY")
 
 
 def is_llm_configured() -> bool:
@@ -57,19 +70,19 @@ def is_llm_configured() -> bool:
 
 
 def get_sync_client(timeout: float = 60.0) -> Optional[openai.OpenAI]:
-    """Synchronous Groq client, or None when no API key is configured."""
+    """Synchronous evaluator client, or None when no API key is configured."""
     key = _api_key()
     if not key:
         return None
-    return openai.OpenAI(api_key=key, base_url=GROQ_BASE_URL, timeout=timeout)
+    return openai.OpenAI(api_key=key, base_url=_base_url(), timeout=timeout)
 
 
 def get_async_client(timeout: float = 60.0) -> Optional[openai.AsyncOpenAI]:
-    """Asynchronous Groq client, or None when no API key is configured."""
+    """Asynchronous evaluator client, or None when no API key is configured."""
     key = _api_key()
     if not key:
         return None
-    return openai.AsyncOpenAI(api_key=key, base_url=GROQ_BASE_URL, timeout=timeout)
+    return openai.AsyncOpenAI(api_key=key, base_url=_base_url(), timeout=timeout)
 
 
 def _strip_fences(content: str) -> str:
