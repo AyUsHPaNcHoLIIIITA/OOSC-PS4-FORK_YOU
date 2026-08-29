@@ -31,9 +31,30 @@ api.interceptors.response.use(
   },
   (err) => {
     if (err?.response) {
-      const { status, statusText } = err.response;
+      const { status, statusText, data } = err.response;
+      // FastAPI puts the real cause in {"detail": ...}; a text/plain endpoint
+      // (or a proxy) may return a raw string body. Surface either so the user
+      // sees WHY (e.g. "AuthenticationError" -> bad key, "RateLimitError" ->
+      // quota) instead of an opaque status number.
+      let detail = '';
+      if (typeof data === 'string') {
+        detail = data.trim();
+      } else if (data && typeof data === 'object') {
+        const d = (data as any).detail;
+        if (typeof d === 'string') {
+          detail = d.trim();
+        } else if (Array.isArray(d)) {
+          // pydantic 422: array of {loc, msg, type}
+          detail = d
+            .map((e: any) => (e && typeof e === 'object' ? e.msg : e))
+            .filter(Boolean)
+            .join('; ');
+        }
+      }
+      if (detail.length > 800) detail = detail.slice(0, 800) + '…';
       throw new Error(
-        `AgentCI backend error ${status}${statusText ? ` (${statusText})` : ''} from ${err.config?.url ?? 'API'}.`,
+        `AgentCI backend error ${status}${statusText ? ` (${statusText})` : ''} from ${err.config?.url ?? 'API'}.` +
+          (detail ? ` ${detail}` : ''),
       );
     }
     throw new Error(
