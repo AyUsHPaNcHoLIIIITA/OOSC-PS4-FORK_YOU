@@ -139,7 +139,22 @@ async def run_scenario(scenario_id: str, agent_version: str, system_prompt: str,
             if response is None:
                 return
             model_calls += 1
-            message = response.choices[0].message
+
+            # openai>=3 returns a bare `str` (not a ChatCompletion) when the upstream
+            # replies with a JSON-string body instead of the OpenAI object shape — some
+            # third-party / self-hosted gateways used as a model-under-test do exactly
+            # this, especially when handed a `tools` request. An empty `choices` list is
+            # the same story. Rather than 500 on `response.choices[0]`, treat whatever
+            # text came back as a settled plain-text reply so the external model still
+            # gets evaluated (it just made no tool call this turn). A genuinely broken
+            # config returns a non-2xx and is still caught/failed-loud above.
+            choices = getattr(response, "choices", None)
+            if not choices:
+                text_content = response if isinstance(response, str) else ""
+                record_step({"role": "assistant", "content": text_content, "latency_ms": latency_ms})
+                messages.append({"role": "assistant", "content": text_content})
+                return
+            message = choices[0].message
 
             if message.tool_calls:
                 # OpenAI protocol: a single assistant message carrying ALL tool
