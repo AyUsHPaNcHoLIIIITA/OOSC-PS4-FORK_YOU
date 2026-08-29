@@ -3,7 +3,7 @@ import time
 import openai
 from typing import Optional, List, Dict, Any
 from app.models.schema import Run, Scenario, Verdict
-from app.llm_utils import get_sync_client, get_model_name, parse_json_response, is_llm_configured
+from app.llm_utils import get_sync_client, get_model_name, parse_json_response, is_llm_configured, json_mode_kwargs
 from app.classifier.rules import run_rule_based_checks
 
 # Sentinel failure_category for judge/infra errors. Scoring (aggregator.py,
@@ -86,7 +86,7 @@ Return ONLY valid JSON matching this exact structure:
                 model=get_model_name(),
                 max_tokens=1024,
                 temperature=0.0,
-                response_format={"type": "json_object"},
+                **json_mode_kwargs(),
                 messages=[
                     {"role": "system", "content": "You are an objective AI Agent evaluation judge. Output ONLY valid JSON adhering to the specified schema."},
                     {"role": "user", "content": prompt},

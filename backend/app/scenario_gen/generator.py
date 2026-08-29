@@ -9,7 +9,7 @@ load_dotenv()
 
 from app.scenario_gen.prompts import META_PROMPTS
 from app.models.schema import Scenario, ToolDef
-from app.llm_utils import get_sync_client, get_model_name, parse_json_response
+from app.llm_utils import get_sync_client, get_model_name, parse_json_response, json_mode_kwargs
 from sqlmodel import Session, select
 from app.database import engine
 
@@ -102,7 +102,7 @@ def generate_scenarios_for_category(category: str, system_prompt: str, tool_sche
             response = client.chat.completions.create(
                 model=get_model_name(),
                 max_tokens=4096,
-                response_format={"type": "json_object"},
+                **json_mode_kwargs(),
                 messages=[
                     {"role": "system", "content": _GENERATOR_SYSTEM},
                     {"role": "user", "content": prompt},

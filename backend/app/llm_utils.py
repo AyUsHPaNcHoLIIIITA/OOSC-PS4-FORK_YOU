@@ -57,6 +57,19 @@ def _extra_headers() -> Optional[Dict[str, str]]:
     return None
 
 
+def json_mode_kwargs() -> Dict[str, Any]:
+    """chat.completions kwargs to force a JSON object response, or {} when JSON
+    mode is disabled via LLM_JSON_MODE=0/false/off. Groq/OpenAI models support
+    response_format={"type":"json_object"}, but some gateways (e.g. Claude behind
+    an OpenAI-compat shim, or an older proxy) reject it with a 400 — turn it off
+    there. parse_json_response() strips fences / slices the outer object, so the
+    stages still get valid JSON without the hint."""
+    val = os.environ.get("LLM_JSON_MODE", "1").strip().lower()
+    if val in ("0", "false", "no", "off"):
+        return {}
+    return {"response_format": {"type": "json_object"}}
+
+
 def is_llm_configured() -> bool:
     """True when a real LLM is available. When False the harness can only
     fabricate placeholder traces, so nothing should be certified — callers must
