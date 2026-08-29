@@ -24,6 +24,13 @@ def _api_key() -> Optional[str]:
     return os.environ.get("GROQ_API_KEY")
 
 
+def is_llm_configured() -> bool:
+    """True when a real LLM is available. When False the harness can only
+    fabricate placeholder traces, so nothing should be certified — callers must
+    report NOT EVALUATED rather than a green result."""
+    return bool(_api_key())
+
+
 def get_sync_client(timeout: float = 60.0) -> Optional[openai.OpenAI]:
     """Synchronous Groq client, or None when no API key is configured."""
     key = _api_key()

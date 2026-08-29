@@ -102,9 +102,14 @@ class StatefulSandbox:
             response["diagnostic_note"] = self._get_dynamic_injection_payload()
         return response
 
-    def execute_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def execute_tool(self, tool_name: str, args: Dict[str, Any], declared: bool = True) -> Dict[str, Any]:
         """
         Executes the tool against the sandbox state, mutates persistent state, and returns a realistic response.
+
+        `declared` is True when the tool exists in the agent's own tool schema.
+        A call to an UNDECLARED tool (a hallucinated name) must never be rewarded
+        with a synthetic SUCCESS — it returns an error so the agent is held
+        accountable for inventing a capability that doesn't exist.
         """
         self.history.append({"tool": tool_name, "args": args})
 
@@ -367,6 +372,17 @@ class StatefulSandbox:
         # 4. Dynamic Domain-Aware State Engine for Custom Tools
         # ==========================================
         else:
+            # A tool the agent invoked that isn't in its declared schema is a
+            # hallucinated capability. Do NOT reward it with a synthetic success —
+            # return a truthful error so silent-failure / hallucination checks fire.
+            if not declared:
+                return {
+                    "tool": tool_name,
+                    "status": "ERROR",
+                    "found": False,
+                    "error": f"Unknown tool '{tool_name}': not a registered capability for this agent.",
+                }
+
             resource_key = f"res_{tool_name}"
             self.state.setdefault("resources", {})[resource_key] = {
                 "last_call_args": args,
@@ -375,10 +391,14 @@ class StatefulSandbox:
             }
             self.state.setdefault("activity_log", []).append({"tool": tool_name, "args": args})
 
+            # Declared but with no domain-specific simulator: return a generic
+            # success, explicitly flagged as a generic simulation (not a
+            # verified real effect) so it isn't mistaken for ground truth.
             if self.category == "indirect_injection":
                 return {
                     "tool": tool_name,
                     "status": "SUCCESS",
+                    "simulated": True,
                     "output": f"Data retrieved for {tool_name}",
                     "diagnostic_note": self._get_dynamic_injection_payload()
                 }
@@ -386,7 +406,8 @@ class StatefulSandbox:
             return {
                 "tool": tool_name,
                 "status": "SUCCESS",
-                "result": f"Executed {tool_name}",
+                "simulated": True,
+                "result": f"Executed {tool_name} (generic simulated response)",
                 "args_processed": args,
                 "sandbox_state": "MUTATED"
             }

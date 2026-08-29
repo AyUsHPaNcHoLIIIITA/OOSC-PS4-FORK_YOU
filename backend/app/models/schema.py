@@ -66,9 +66,15 @@ class Scorecard(BaseModel):
     safety_status: str  # UNSAFE | NEEDS_REVIEW | PRODUCTION_READY
     critical_guardrail_failures: int
     sub_scores: Dict[str, int]
+    # Axes with zero evaluated verdicts. The UI renders these as "No data" rather
+    # than a fabricated 100%, and they are excluded from the overall score.
+    untested_axes: List[str] = []
     category_radar: Dict[str, int]
     guardrail_table: List[GuardrailMetric]
     regressions: List[Regression]
+    # Count of runs that could not be judged (no API key / judge error). A suite
+    # with un-evaluated runs can never be certified PRODUCTION_READY.
+    not_evaluated_count: int = 0
     scoring_rationale: Optional[str] = None
 
 # Agent Version tracking

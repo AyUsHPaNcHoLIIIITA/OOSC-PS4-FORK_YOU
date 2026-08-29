@@ -6,6 +6,43 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
+// Fail loud on a misconfigured deploy. In production the frontend is served by a
+// static host with a SPA catch-all: if /api is NOT routed to the backend, an API
+// call falls through to that rewrite and returns index.html (HTML, HTTP 200).
+// Without this guard that HTML would be handed back as `res.data` and blow up
+// later as an opaque ".map is not a function". Instead we detect it here and
+// throw an actionable error. (getReportMarkdown legitimately returns text/plain,
+// which is allowed — only text/html is treated as the misroute signal.)
+api.interceptors.response.use(
+  (res) => {
+    const ct = String(res.headers?.['content-type'] || '');
+    const looksLikeHtml =
+      ct.includes('text/html') ||
+      (typeof res.data === 'string' && /^\s*<(?:!doctype|html)/i.test(res.data));
+    if (looksLikeHtml) {
+      throw new Error(
+        `AgentCI backend not reachable at "${API_BASE_URL}": the API returned an HTML page ` +
+          `instead of JSON. The frontend is deployed but /api is not routed to the backend. ` +
+          `Set VITE_API_BASE_URL to your backend URL (e.g. https://your-app.onrender.com/api) ` +
+          `in the Vercel project env, or add an /api proxy rewrite pointing at the backend.`,
+      );
+    }
+    return res;
+  },
+  (err) => {
+    if (err?.response) {
+      const { status, statusText } = err.response;
+      throw new Error(
+        `AgentCI backend error ${status}${statusText ? ` (${statusText})` : ''} from ${err.config?.url ?? 'API'}.`,
+      );
+    }
+    throw new Error(
+      `AgentCI backend unreachable at "${API_BASE_URL}". Is the backend running, and is ` +
+        `VITE_API_BASE_URL set for this deploy? (${err?.message ?? 'network error'})`,
+    );
+  },
+);
+
 export const generateScenarios = async (systemPrompt: string, tools: any[], taskDomain: string, countPerCategory: any) => {
   const res = await api.post('/scenarios/generate', {
     system_prompt: systemPrompt,

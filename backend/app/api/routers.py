@@ -5,7 +5,7 @@ from app.scenario_gen.generator import generate_all_scenarios
 from app.scenario_gen.analyzer import analyze_agent
 from app.harness.runner import execute_scenarios
 from app.classifier.rules import run_rule_based_checks
-from app.classifier.judge import run_llm_judge
+from app.classifier.judge import run_llm_judge, classify_run
 from app.guardrail.scorer import compute_guardrail_metrics
 from app.scorecard.aggregator import generate_scorecard, evaluate_gate
 from app.scorecard.badge import build_badge_svg, badge_for_scorecard
@@ -74,7 +74,14 @@ class ReplayRunRequest(BaseModel):
     tools: List[Dict[str, Any]]
 
 @router.post("/api/runs/replay/{run_id}")
-async def replay_run_endpoint(run_id: str, req: ReplayRunRequest):
+def replay_run_endpoint(run_id: str, req: ReplayRunRequest):
+    """Deterministic replay. Instead of regenerating a fresh (and inherently
+    non-deterministic) rollout, this re-classifies the ORIGINAL recorded
+    transcript for the run: the same steps go back through the rules->judge
+    cascade. Rule checks are pure and the judge runs at temperature 0, so the
+    verdict is reproduced from the recorded evidence. We compare it to the stored
+    verdict and report whether it reproduced — a real determinism check, not a
+    new dice roll."""
     try:
         with Session(engine) as session:
             orig_run = session.exec(select(Run).where(Run.run_id == run_id)).first()
@@ -83,29 +90,21 @@ async def replay_run_endpoint(run_id: str, req: ReplayRunRequest):
             scenario = session.exec(select(Scenario).where(Scenario.scenario_id == orig_run.scenario_id)).first()
             if not scenario:
                 raise HTTPException(status_code=404, detail="Scenario not found")
+            prior = session.exec(select(Verdict).where(Verdict.run_id == run_id)).first()
+            prior_outcome = prior.outcome if prior else None
 
-        # Import run_scenario
-        from app.harness.runner import run_scenario
-        replayed_run = await run_scenario(
-            scenario_id=orig_run.scenario_id,
-            agent_version=orig_run.agent_version,
-            system_prompt=req.system_prompt,
-            tool_schemas=req.tools
-        )
-
-        verdict = run_rule_based_checks(replayed_run, scenario, req.tools)
-        if not verdict:
-            verdict = run_llm_judge(replayed_run, scenario)
-
-        with Session(engine) as session:
-            session.add(verdict)
-            session.commit()
-            session.refresh(verdict)
+        # Re-judge the SAME recorded steps. No new agent rollout, no fresh LLM
+        # generation of the trace — this is what makes the replay deterministic.
+        verdict = classify_run(orig_run, scenario, req.tools)
 
         return {
-            "replayed_run": replayed_run,
-            "verdict": verdict
+            "replayed_run": orig_run,
+            "verdict": verdict,
+            "original_outcome": prior_outcome,
+            "reproduced": prior_outcome is None or prior_outcome == verdict.outcome,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print("Replay Error:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -133,10 +132,8 @@ def classify_runs(req: ClassifyRequest):
             if not scenario:
                 continue
                 
-            verdict = run_rule_based_checks(run, scenario, req.tools)
-            if not verdict:
-                verdict = run_llm_judge(run, scenario)
-                
+            verdict = classify_run(run, scenario, req.tools)
+
             session.add(verdict)
             verdicts.append(verdict)
         session.commit()
@@ -200,9 +197,7 @@ async def ci_gate(req: CiGateRequest):
                     scenario = session.exec(select(Scenario).where(Scenario.scenario_id == run.scenario_id)).first()
                     if not scenario:
                         continue
-                    verdict = run_rule_based_checks(run, scenario, req.tools)
-                    if not verdict:
-                        verdict = run_llm_judge(run, scenario)
+                    verdict = classify_run(run, scenario, req.tools)
                     session.add(verdict)
                 session.commit()
 
@@ -413,9 +408,7 @@ async def library_run(req: LibraryRunRequest):
                 scenario = session.exec(select(Scenario).where(Scenario.scenario_id == run.scenario_id)).first()
                 if not scenario:
                     continue
-                verdict = run_rule_based_checks(run, scenario, req.tools)
-                if not verdict:
-                    verdict = run_llm_judge(run, scenario)
+                verdict = classify_run(run, scenario, req.tools)
                 session.add(verdict)
                 verdicts.append(verdict)
             session.commit()

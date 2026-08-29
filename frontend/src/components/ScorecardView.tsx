@@ -78,11 +78,24 @@ export default function ScorecardView({ state }: any) {
     );
   }
 
-  const radarData = Object.entries(scorecard.category_radar || {}).map(([key, value]) => ({
-    subject: key,
-    A: value,
-    fullMark: 100,
-  }));
+  // Axes the backend never actually tested. We render these as "No data" and
+  // drop them from the radar rather than plotting a fabricated 100%.
+  const untestedAxes = new Set<string>(scorecard.untested_axes || []);
+  // Radar subjects are human labels; map them back to the axis keys used above.
+  const RADAR_AXIS_KEY: Record<string, string> = {
+    'Instruction Following': 'Instruction_Following',
+    'Safety & Guardrails': 'Safety',
+    'Accuracy': 'Accuracy',
+    'Robustness': 'Robustness',
+    'Efficiency': 'Efficiency',
+  };
+  const radarData = Object.entries(scorecard.category_radar || {})
+    .filter(([key]) => !untestedAxes.has(RADAR_AXIS_KEY[key] ?? key))
+    .map(([key, value]) => ({
+      subject: key,
+      A: value,
+      fullMark: 100,
+    }));
 
   const isUnsafe = scorecard.safety_status === 'UNSAFE';
   const isIncomplete = scorecard.safety_status === 'EVALUATION_INCOMPLETE';
@@ -329,20 +342,29 @@ jobs:
           { label: 'Accuracy & State', key: 'Accuracy', icon: Gauge, color: 'text-emerald-400', weight: '15%' },
           { label: 'Efficiency & Loops', key: 'Efficiency', icon: Zap, color: 'text-cyan-400', weight: '10%' }
         ].map(sub => {
-          const score = scorecard.sub_scores?.[sub.key] ?? 100;
           const Icon = sub.icon;
+          // An untested axis has no evaluated verdicts. Show "No data" instead of
+          // a fabricated 100% so an unevaluated dimension never reads as green.
+          const isUntested = untestedAxes.has(sub.key);
+          const score = scorecard.sub_scores?.[sub.key] ?? 0;
           return (
             <div key={sub.key} className="glass rounded-xl p-4 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
                 <Icon className={`w-4 h-4 ${sub.color}`} />
                 <span className="text-[10px] text-slate-500 font-mono">Weight: {sub.weight}</span>
               </div>
-              <div className="text-2xl font-bold text-white">{score}%</div>
+              {isUntested ? (
+                <div className="text-2xl font-bold text-slate-500">
+                  No data<span className="block text-[10px] font-medium tracking-wide text-slate-600 uppercase mt-0.5">not tested</span>
+                </div>
+              ) : (
+                <div className="text-2xl font-bold text-white">{score}%</div>
+              )}
               <div className="text-xs text-slate-400 font-medium leading-tight">{sub.label}</div>
               <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1">
-                <div 
-                  className={`h-full ${score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`} 
-                  style={{ width: `${score}%` }} 
+                <div
+                  className={`h-full ${isUntested ? 'bg-slate-700' : score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                  style={{ width: isUntested ? '100%' : `${score}%`, opacity: isUntested ? 0.35 : 1 }}
                 />
               </div>
             </div>
