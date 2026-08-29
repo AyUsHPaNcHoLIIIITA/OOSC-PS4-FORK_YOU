@@ -201,27 +201,50 @@ const CATEGORIES = [
   { id: 'goal_drift', label: 'Goal Drift', desc: 'Multi-turn redirection away from core role' }
 ];
 
+const DEFAULT_COUNTS: Record<string, number> = {
+  happy_path: 1,
+  destructive_action_pressure: 1,
+  direct_injection: 1,
+  indirect_injection: 1,
+};
+
 export default function AgentSetup({ state, setState }: any) {
   const navigate = useNavigate();
+  // Purely transient UI flags stay local — they only matter while an action is
+  // in flight and are meaningless after navigating away.
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [replayingRunId, setReplayingRunId] = useState<string | null>(null);
   const [savingLibrary, setSavingLibrary] = useState(false);
-  const [analysis, setAnalysis] = useState<any>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [agentDomain, setAgentDomain] = useState('devops');
-  const [selectedCounts, setSelectedCounts] = useState<Record<string, number>>({
-    happy_path: 1,
-    destructive_action_pressure: 1,
-    direct_injection: 1,
-    indirect_injection: 1
-  });
   const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'console' | 'scenarios'>('console');
-  // Feature 2: run each scenario N times so flaky (non-deterministic) safety
-  // behavior surfaces as a per-scenario pass-rate instead of a single verdict.
-  const [samplesPerScenario, setSamplesPerScenario] = useState(1);
+
+  // Everything the user expects to still be here after visiting the Scorecard /
+  // Threat Library and coming back lives in the shared globalState, so it
+  // survives AgentSetup unmounting on route changes. Previously the live console
+  // logs and the analysis panel were local useState and got wiped on every
+  // navigation. Feature 2's samplesPerScenario runs each scenario N times so
+  // flaky (non-deterministic) safety behavior surfaces as a per-scenario
+  // pass-rate instead of a single verdict.
+  const logs: string[] = state.logs || [];
+  const analysis = state.analysis ?? null;
+  const agentDomain: string = state.agentDomain ?? 'devops';
+  const selectedCounts: Record<string, number> = state.selectedCounts ?? DEFAULT_COUNTS;
+  const samplesPerScenario: number = state.samplesPerScenario ?? 1;
+  const activeTab: 'console' | 'scenarios' = state.activeTab ?? 'console';
+
+  const setAnalysis = (a: any) => setState((prev: any) => ({ ...prev, analysis: a }));
+  const setAgentDomain = (d: string) => setState((prev: any) => ({ ...prev, agentDomain: d }));
+  const setSamplesPerScenario = (n: number) => setState((prev: any) => ({ ...prev, samplesPerScenario: n }));
+  const setActiveTab = (t: 'console' | 'scenarios') => setState((prev: any) => ({ ...prev, activeTab: t }));
+  // Accept both a value and an updater fn, mirroring the useState API the call
+  // sites were written against.
+  const setSelectedCounts = (updater: any) =>
+    setState((prev: any) => ({
+      ...prev,
+      selectedCounts:
+        typeof updater === 'function' ? updater(prev.selectedCounts ?? DEFAULT_COUNTS) : updater,
+    }));
 
   React.useEffect(() => {
     if (!state.systemPrompt && !state.tools?.length) {
@@ -231,19 +254,23 @@ export default function AgentSetup({ state, setState }: any) {
 
   const loadPreset = (key: keyof typeof PRESETS) => {
     const p = PRESETS[key];
-    setAgentDomain(p.domain);
-    setAnalysis(null);
-    setState({
-      ...state,
+    // Single functional update so nothing gets clobbered by a stale spread.
+    setState((prev: any) => ({
+      ...prev,
       agentVersion: p.agentVersion,
       systemPrompt: p.systemPrompt,
-      tools: p.tools
-    });
+      tools: p.tools,
+      agentDomain: p.domain,
+      analysis: null,
+    }));
     addLog(`Loaded preset: ${p.name}`);
   };
 
   const addLog = (msg: string) => {
-    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    setState((prev: any) => ({
+      ...prev,
+      logs: [...(prev.logs || []), `[${new Date().toLocaleTimeString()}] ${msg}`],
+    }));
   };
 
   const toggleCategory = (catId: string) => {

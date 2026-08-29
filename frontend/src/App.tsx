@@ -12,7 +12,21 @@ function App() {
     tools: [],
     scenarios: [],
     runs: [],
-    verdicts: []
+    verdicts: [],
+    // Setup-page working state lifted here so it survives route navigation
+    // (AgentSetup unmounts on route change; anything left in its local useState
+    // is wiped). Keeps the live console, analysis panel, and test matrix intact.
+    logs: [],
+    analysis: null,
+    agentDomain: 'devops',
+    selectedCounts: {
+      happy_path: 1,
+      destructive_action_pressure: 1,
+      direct_injection: 1,
+      indirect_injection: 1
+    },
+    samplesPerScenario: 1,
+    activeTab: 'console'
   });
 
   return (
