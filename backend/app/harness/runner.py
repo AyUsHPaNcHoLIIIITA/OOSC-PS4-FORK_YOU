@@ -4,11 +4,13 @@ import time
 import asyncio
 from datetime import datetime
 import openai
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.models.schema import Run, Scenario
 from app.harness.mock_tools import simulate_tool_response
 from app.harness.sandbox import StatefulSandbox
-from app.llm_utils import get_async_client, get_model_name
+from app.llm_utils import (
+    get_async_client, get_model_name, build_async_client, safe_error, ModelConfigError,
+)
 from sqlmodel import Session, select
 from app.database import engine
 
@@ -39,13 +41,14 @@ def convert_tools_to_openai(tool_schemas: List[Dict[str, Any]]) -> List[Dict[str
     return openai_tools
 
 
-async def _call_model_with_retry(client, messages, openai_tools):
+async def _call_model_with_retry(client, messages, openai_tools, model):
     """Single model call with linear backoff on rate limits. Returns the response
-    or None if all attempts are exhausted."""
+    or None if all attempts are exhausted. `model` is the agent-under-test model
+    id (the plugged-in model when one is configured, else the backend default)."""
     for attempt in range(4):
         try:
             return await client.chat.completions.create(
-                model=get_model_name(),
+                model=model,
                 max_tokens=1024,
                 temperature=AGENT_TEMPERATURE,
                 messages=messages,
@@ -58,13 +61,27 @@ async def _call_model_with_retry(client, messages, openai_tools):
     return None
 
 
-async def run_scenario(scenario_id: str, agent_version: str, system_prompt: str, tool_schemas: List[Dict[str, Any]]) -> Run:
+async def run_scenario(scenario_id: str, agent_version: str, system_prompt: str, tool_schemas: List[Dict[str, Any]], model_cfg: Optional[Dict[str, Any]] = None) -> Run:
     with Session(engine) as session:
         scenario = session.exec(select(Scenario).where(Scenario.scenario_id == scenario_id)).first()
         if not scenario:
             raise ValueError(f"Scenario {scenario_id} not found")
 
-    client = get_async_client()
+    # Agent-under-test model selection. When the caller supplies a *validated*
+    # model_cfg (the user's own key/endpoint, checked in routers.resolve_model_cfg),
+    # the RUNNER drives that model — this is the model being evaluated. Scenario
+    # generation and judging always stay on the backend's own Groq creds (see
+    # llm_utils), keeping the evaluator independent of the tested model. With no
+    # config AND no backend key, we fall back to a mock trace (nothing is certified).
+    if model_cfg:
+        client = build_async_client(
+            model_cfg["base_url"], model_cfg["api_key"],
+            model_cfg.get("extra_headers"),
+        )
+        model_name = model_cfg.get("model") or get_model_name()
+    else:
+        client = get_async_client()
+        model_name = get_model_name()
     if client is None:
         return mock_run(scenario, agent_version, tool_schemas)
 
@@ -100,10 +117,24 @@ async def run_scenario(scenario_id: str, agent_version: str, system_prompt: str,
                 return
             try:
                 start_time = time.time()
-                response = await _call_model_with_retry(client, messages, openai_tools)
+                response = await _call_model_with_retry(client, messages, openai_tools, model_name)
                 latency_ms = int((time.time() - start_time) * 1000)
             except Exception as e:
-                print(f"Error in runner model call: {e}")
+                # Mask any supplied secret (key + custom auth headers) so a
+                # model-under-test error never leaks it into logs or the response.
+                key = model_cfg.get("api_key") if model_cfg else None
+                header_secrets = list((model_cfg.get("extra_headers") or {}).values()) if model_cfg else []
+                masked = safe_error(e, key, *header_secrets)
+                if model_cfg is not None:
+                    # FAIL LOUD: the user's plugged-in model is unreachable or
+                    # misconfigured (bad key, unknown model id, network error).
+                    # Never swallow this and save a user-only trace — a degenerate
+                    # (0 model-call) transcript would otherwise be scored as a real
+                    # agent result and could certify a model that never ran.
+                    # Propagates to the routers, which map it to a clean 400.
+                    raise ModelConfigError(f"Model under test call failed: {masked}") from None
+                # Backend-creds path keeps the lenient behavior it always had.
+                print(f"Error in runner model call: {masked}")
                 return
             if response is None:
                 return
@@ -244,15 +275,16 @@ def mock_run(scenario, agent_version, tool_schemas):
     return run
 
 
-async def execute_scenarios(scenario_ids: List[str], agent_version: str, system_prompt: str, tool_schemas: List[Dict[str, Any]], samples: int = 1) -> List[Run]:
+async def execute_scenarios(scenario_ids: List[str], agent_version: str, system_prompt: str, tool_schemas: List[Dict[str, Any]], samples: int = 1, model_cfg: Optional[Dict[str, Any]] = None) -> List[Run]:
     """Run each scenario `samples` times. With samples>1 the agent's non-zero
     temperature makes repeated runs of the same scenario diverge, which is what
-    lets the scorer measure per-scenario pass-rate and flakiness."""
+    lets the scorer measure per-scenario pass-rate and flakiness. `model_cfg`, when
+    supplied, points the agent-under-test runner at the user's own validated model."""
     samples = max(1, samples)
     runs = []
     for sid in scenario_ids:
         for _ in range(samples):
-            run = await run_scenario(sid, agent_version, system_prompt, tool_schemas)
+            run = await run_scenario(sid, agent_version, system_prompt, tool_schemas, model_cfg=model_cfg)
             runs.append(run)
             await asyncio.sleep(0.5)
     return runs

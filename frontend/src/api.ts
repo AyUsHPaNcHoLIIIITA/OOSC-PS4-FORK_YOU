@@ -74,13 +74,114 @@ export const generateScenarios = async (systemPrompt: string, tools: any[], task
   return res.data;
 };
 
-export const executeRuns = async (scenarioIds: string[], agentVersion: string, systemPrompt: string, tools: any[], samples: number = 1) => {
+// --- Model under test (the plugged-in agent model users bring their own key for) ---
+// The evaluator (scenario generation + judging) always runs on OUR backend Groq
+// creds; only the agent-under-test runner uses this config. The key lives in the
+// browser for the session, is sent per-request, and is never persisted anywhere.
+export type MutProvider = 'groq' | 'openai' | 'custom';
+
+export interface ModelConfig {
+  enabled: boolean;
+  provider: MutProvider;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  headersText: string; // raw JSON for custom extra headers, e.g. {"x-org":"acme"}
+}
+
+export interface ModelUnderTest {
+  provider: MutProvider;
+  api_key: string;
+  base_url?: string;
+  model?: string;
+  extra_headers?: Record<string, string>;
+}
+
+// Redact a key for display: never show the middle. Mirrors backend mask_key.
+export const maskKey = (key?: string): string => {
+  if (!key) return '';
+  const k = String(key);
+  return k.length <= 8 ? '****' : `${k.slice(0, 4)}…${k.slice(-4)}`;
+};
+
+// Parse the free-text extra-headers box into an object, or throw a friendly error.
+const parseHeaders = (text: string): Record<string, string> | undefined => {
+  const t = (text || '').trim();
+  if (!t) return undefined;
+  let obj: any;
+  try {
+    obj = JSON.parse(t);
+  } catch {
+    throw new Error('Extra headers must be valid JSON, e.g. {"x-org":"acme"}');
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('Extra headers must be a JSON object of string values.');
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj)) out[k] = String(v);
+  return Object.keys(out).length ? out : undefined;
+};
+
+// Build the wire payload from UI config, or undefined when the feature is off /
+// no key is entered (backend then falls back to its own model). Throws on
+// obviously-invalid input so the UI can surface it before a run starts.
+export const buildModelUnderTest = (mc?: ModelConfig): ModelUnderTest | undefined => {
+  if (!mc || !mc.enabled) return undefined;
+  const apiKey = (mc.apiKey || '').trim();
+  if (!apiKey) return undefined;
+  const payload: ModelUnderTest = { provider: mc.provider, api_key: apiKey };
+  const model = (mc.model || '').trim();
+  if (model) payload.model = model;
+  if (mc.provider === 'custom') {
+    payload.base_url = (mc.baseUrl || '').trim();
+    const headers = parseHeaders(mc.headersText);
+    if (headers) payload.extra_headers = headers;
+  }
+  return payload;
+};
+
+// A masked, non-secret identity summary of the plugged-in model for display in
+// the UI (proof to a reviewer that a distinct model is under test). Never carries
+// the raw key.
+export const modelIdentityFromConfig = (mc?: ModelConfig) => {
+  if (!mc || !mc.enabled || !(mc.apiKey || '').trim()) return null;
+  const endpoint =
+    mc.provider === 'groq'
+      ? 'api.groq.com'
+      : mc.provider === 'openai'
+        ? 'api.openai.com'
+        : (() => {
+            try {
+              return new URL((mc.baseUrl || '').trim()).host || '(custom)';
+            } catch {
+              return '(custom)';
+            }
+          })();
+  return {
+    provider: mc.provider,
+    endpoint,
+    model: (mc.model || '').trim() || (mc.provider === 'groq' ? '(backend default)' : ''),
+    key: maskKey(mc.apiKey),
+  };
+};
+
+// Probe the plugged-in model with a 1-token call so users can confirm the key /
+// endpoint work BEFORE running a full suite. Returns {ok, identity, latency_ms}.
+export const testModelConnection = async (mc: ModelConfig) => {
+  const payload = buildModelUnderTest(mc);
+  if (!payload) throw new Error('Enter an API key for the model under test first.');
+  const res = await api.post('/llm/validate', payload);
+  return res.data;
+};
+
+export const executeRuns = async (scenarioIds: string[], agentVersion: string, systemPrompt: string, tools: any[], samples: number = 1, modelUnderTest?: ModelUnderTest) => {
   const res = await api.post('/runs/execute', {
     scenario_ids: scenarioIds,
     agent_version: agentVersion,
     system_prompt: systemPrompt,
     tools,
-    samples
+    samples,
+    model_under_test: modelUnderTest,
   });
   return res.data;
 };
@@ -173,12 +274,13 @@ export const listLibrary = async () => {
   return res.data;
 };
 
-export const runLibrary = async (agentVersion: string, systemPrompt: string, tools: any[], entryIds?: string[]) => {
+export const runLibrary = async (agentVersion: string, systemPrompt: string, tools: any[], entryIds?: string[], modelUnderTest?: ModelUnderTest) => {
   const res = await api.post('/library/run', {
     agent_version: agentVersion,
     system_prompt: systemPrompt,
     tools,
     entry_ids: entryIds,
+    model_under_test: modelUnderTest,
   });
   return res.data;
 };

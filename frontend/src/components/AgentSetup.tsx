@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import {
   generateScenarios, executeRuns, classifyRuns, analyzeAgent,
-  autoGenerateScenarios, replayRun, addToLibrary
+  autoGenerateScenarios, replayRun, addToLibrary,
+  testModelConnection, buildModelUnderTest, modelIdentityFromConfig
 } from '../api';
 import {
   Play, Cpu, Sparkles, CheckCircle2, XCircle, ChevronDown, ChevronRight,
   RefreshCw, BrainCircuit, AlertOctagon, Flame, Target, Wand2,
-  RotateCcw, ListFilter, Library
+  RotateCcw, ListFilter, Library, KeyRound, PlugZap, ShieldCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -218,6 +219,8 @@ export default function AgentSetup({ state, setState }: any) {
   const [replayingRunId, setReplayingRunId] = useState<string | null>(null);
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
+  const [testingModel, setTestingModel] = useState(false);
+  const [modelTestResult, setModelTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // Everything the user expects to still be here after visiting the Scorecard /
   // Threat Library and coming back lives in the shared globalState, so it
@@ -245,6 +248,38 @@ export default function AgentSetup({ state, setState }: any) {
       selectedCounts:
         typeof updater === 'function' ? updater(prev.selectedCounts ?? DEFAULT_COUNTS) : updater,
     }));
+
+  // Model UNDER TEST config (see api.ts): the plugged-in agent model users bring
+  // their own key for. The evaluator (generation + judging) stays on OUR backend.
+  const DEFAULT_MODEL_CONFIG = { enabled: false, provider: 'groq', apiKey: '', baseUrl: '', model: '', headersText: '' };
+  const modelConfig = state.modelConfig ?? DEFAULT_MODEL_CONFIG;
+  const setModelConfig = (patch: any) =>
+    setState((prev: any) => ({
+      ...prev,
+      modelConfig: { ...(prev.modelConfig ?? DEFAULT_MODEL_CONFIG), ...patch },
+      // any config change invalidates a prior connection proof
+      modelIdentity: null,
+    }));
+  const liveIdentity = modelIdentityFromConfig(modelConfig);
+
+  // Advisory pre-flight: probe the plugged-in model with a 1-token call so the
+  // user can confirm key/endpoint work before a full suite. Runs stay fail-loud
+  // server-side regardless, so this is a convenience, not a gate.
+  const handleTestModelConnection = async () => {
+    setTestingModel(true);
+    setModelTestResult(null);
+    try {
+      const res = await testModelConnection(modelConfig);
+      setState((prev: any) => ({ ...prev, modelIdentity: res.identity ?? null }));
+      const id = res.identity || {};
+      setModelTestResult({ ok: true, msg: `Reachable · ${res.latency_ms ?? '?'} ms` });
+      addLog(`🔌 Model under test reachable: ${id.model ?? ''} @ ${id.endpoint ?? ''} (${res.latency_ms ?? '?'} ms).`);
+    } catch (e: any) {
+      setModelTestResult({ ok: false, msg: e?.message || 'Connection failed' });
+      addLog('❌ Model connection test failed: ' + (e?.message || 'error'));
+    }
+    setTestingModel(false);
+  };
 
   React.useEffect(() => {
     if (!state.systemPrompt && !state.tools?.length) {
@@ -339,7 +374,7 @@ export default function AgentSetup({ state, setState }: any) {
       addLog(`⚡ Executing ${state.scenarios.length} scenarios in Stateful Sandbox...`);
       const toolsObj = typeof state.tools === 'string' ? JSON.parse(state.tools) : state.tools;
       const scenarioIds = state.scenarios.map((s: any) => s.scenario_id);
-      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj, samplesPerScenario);
+      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj, samplesPerScenario, buildModelUnderTest(state.modelConfig));
       setState((prev: any) => ({ ...prev, runs }));
       addLog(`✅ Captured ${runs.length} execution traces.`);
 
@@ -369,9 +404,12 @@ export default function AgentSetup({ state, setState }: any) {
       setState((prev: any) => ({ ...prev, scenarios: autoRes.scenarios }));
       addLog(`✅ Generated ${autoRes.scenarios.length} agent-specific adversarial scenarios.`);
 
-      addLog(`2️⃣ Executing multi-turn test scenarios in Stateful Sandbox against Groq LLM...`);
+      const mut = buildModelUnderTest(state.modelConfig);
+      addLog(mut
+        ? `2️⃣ Executing multi-turn scenarios in Stateful Sandbox against the plugged-in model (${modelIdentityFromConfig(state.modelConfig)?.endpoint})...`
+        : `2️⃣ Executing multi-turn test scenarios in Stateful Sandbox against Groq LLM...`);
       const scenarioIds = autoRes.scenarios.map((s: any) => s.scenario_id);
-      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj, samplesPerScenario);
+      const runs = await executeRuns(scenarioIds, state.agentVersion, state.systemPrompt, toolsObj, samplesPerScenario, mut);
       setState((prev: any) => ({ ...prev, runs }));
       addLog(`✅ Captured ${runs.length} execution traces.`);
 
@@ -602,6 +640,140 @@ export default function AgentSetup({ state, setState }: any) {
                 onChange={e => setState({ ...state, tools: e.target.value })}
               />
             </div>
+          </div>
+
+          {/* Model Under Test — the plugged-in agent model the user brings a key
+              for. The evaluator (scenario generation + judging) ALWAYS runs on
+              our backend Groq creds; ONLY this model drives the agent-under-test
+              runner. Key is sent per-request and never persisted or logged. */}
+          <div className="glass rounded-xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold flex items-center space-x-2 text-white">
+                <KeyRound className="text-fuchsia-400 w-5 h-5" />
+                <span>Model Under Test</span>
+              </h2>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className="text-xs font-semibold text-slate-400">
+                  {modelConfig.enabled ? 'Enabled' : 'Using backend model'}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={!!modelConfig.enabled}
+                  onChange={e => setModelConfig({ enabled: e.target.checked })}
+                  className="rounded bg-slate-800 border-slate-700 text-fuchsia-600 focus:ring-0"
+                />
+              </label>
+            </div>
+
+            <div className="text-[11px] text-slate-400 leading-relaxed bg-slate-950 border border-slate-800 rounded-lg p-3 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <span>
+                Bring your own model's key to put <span className="text-slate-200 font-semibold">that model under adversarial test</span>.
+                Scenario generation and judging always run on our own backend evaluator, so results stay independent of the
+                model being tested. Your key is sent per run, never stored, and always shown masked.
+              </span>
+            </div>
+            {modelConfig.enabled && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  {([
+                    ['groq', 'Groq / key-only'],
+                    ['openai', 'OpenAI'],
+                    ['custom', 'Custom endpoint'],
+                  ] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setModelConfig({ provider: val })}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                        modelConfig.provider === val
+                          ? 'bg-fuchsia-600/20 text-fuchsia-200 border-fuchsia-500/50'
+                          : 'glass-btn text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">API Key</label>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      className="w-full glass-dark rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
+                      value={modelConfig.apiKey || ''}
+                      onChange={e => setModelConfig({ apiKey: e.target.value })}
+                      placeholder="sk-..."
+                    />
+                  </div>
+
+                  {modelConfig.provider === 'custom' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Base URL (OpenAI-compatible)</label>
+                      <input
+                        type="text"
+                        className="w-full glass-dark rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
+                        value={modelConfig.baseUrl || ''}
+                        onChange={e => setModelConfig({ baseUrl: e.target.value })}
+                        placeholder="https://your-gateway.example.com/v1"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                      Model {modelConfig.provider === 'groq' ? '(optional — defaults to backend model)' : ''}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full glass-dark rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
+                      value={modelConfig.model || ''}
+                      onChange={e => setModelConfig({ model: e.target.value })}
+                      placeholder={modelConfig.provider === 'openai' ? 'gpt-4o-mini' : modelConfig.provider === 'custom' ? 'your-model-id' : 'openai/gpt-oss-20b'}
+                    />
+                  </div>
+
+                  {modelConfig.provider === 'custom' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Extra Headers (JSON, optional)</label>
+                      <textarea
+                        rows={2}
+                        className="w-full glass-dark rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
+                        value={modelConfig.headersText || ''}
+                        onChange={e => setModelConfig({ headersText: e.target.value })}
+                        placeholder='{"x-org":"acme"}'
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <button
+                    onClick={handleTestModelConnection}
+                    disabled={testingModel || !(modelConfig.apiKey || '').trim()}
+                    className="text-xs glass-btn text-fuchsia-200 border border-fuchsia-500/40 disabled:opacity-40 px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-colors font-semibold"
+                  >
+                    {testingModel ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlugZap className="w-3.5 h-3.5" />}
+                    <span>{testingModel ? 'Testing…' : 'Test connection'}</span>
+                  </button>
+                  {modelTestResult && (
+                    <span className={`text-xs font-semibold flex items-center gap-1 ${modelTestResult.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {modelTestResult.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                      {modelTestResult.msg}
+                    </span>
+                  )}
+                </div>
+
+                {liveIdentity && (
+                  <div className="text-[11px] bg-slate-950 border border-fuchsia-500/20 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
+                    <span className="text-slate-500">Under test:</span>
+                    <span className="text-fuchsia-300">{liveIdentity.provider}</span>
+                    <span className="text-slate-400">{liveIdentity.endpoint}</span>
+                    {liveIdentity.model && <span className="text-slate-300">{liveIdentity.model}</span>}
+                    <span className="text-slate-500">key {liveIdentity.key}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Dynamic Capability & Threat Surface Analysis Card */}

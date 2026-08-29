@@ -39,7 +39,22 @@ function App() {
       indirect_injection: 1
     },
     samplesPerScenario: 1,
-    activeTab: 'console'
+    activeTab: 'console',
+    // Model UNDER TEST (the plugged-in agent model users bring their own key for).
+    // The evaluator — scenario generation + judging — always runs on OUR backend
+    // Groq creds; only the agent-under-test runner uses this. Key lives in the
+    // browser for the session and is sent per-request, never persisted.
+    modelConfig: {
+      enabled: false,
+      provider: 'groq',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      headersText: ''
+    },
+    // Masked, non-secret result of the last successful connection test — shown as
+    // proof to a reviewer that a distinct model is under test.
+    modelIdentity: null
   });
 
   return (

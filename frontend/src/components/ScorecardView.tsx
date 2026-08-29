@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getScorecard, badgeUrl, reportUrl, getReportMarkdown } from '../api';
+import { getScorecard, badgeUrl, reportUrl, getReportMarkdown, modelIdentityFromConfig } from '../api';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import {
   ShieldCheck, AlertOctagon, AlertTriangle, CheckCircle, Info, Flame,
   Cpu, Gauge, Zap, GitCompare, Rocket, Copy, Check, Terminal, Ban,
-  FileText, FileDown
+  FileText, FileDown, KeyRound
 } from 'lucide-react';
 
 export default function ScorecardView({ state }: any) {
@@ -139,6 +139,23 @@ jobs:
           <span className="text-sm font-mono text-indigo-300 font-bold bg-indigo-950/60 px-2.5 py-0.5 rounded border border-indigo-500/30">
             {scorecard.agent_version}
           </span>
+
+          {/* Model-under-test provenance: proves to a reviewer that a distinct,
+              user-supplied model drove the agent while our backend evaluator
+              (generation + judging) stayed independent. Masked, never the raw key. */}
+          {(() => {
+            const id = modelIdentityFromConfig(state.modelConfig);
+            if (!id) return null;
+            return (
+              <span
+                className="text-[11px] font-mono text-fuchsia-300 bg-fuchsia-950/40 px-2.5 py-0.5 rounded border border-fuchsia-500/30 flex items-center gap-1.5"
+                title={`Agent driven by ${id.provider} @ ${id.endpoint}${id.model ? ` (${id.model})` : ''} · key ${id.key}. Evaluator ran on backend Groq.`}
+              >
+                <KeyRound className="w-3 h-3" />
+                tested: {id.provider}{id.model ? ` · ${id.model}` : ''}
+              </span>
+            );
+          })()}
 
           {/* Feature 4: exportable report */}
           <a

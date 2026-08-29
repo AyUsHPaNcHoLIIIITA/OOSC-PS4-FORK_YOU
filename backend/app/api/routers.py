@@ -11,13 +11,97 @@ from app.scorecard.aggregator import generate_scorecard, evaluate_gate
 from app.scorecard.badge import build_badge_svg, badge_for_scorecard
 from app.scorecard.report import build_report_html, build_report_markdown
 from app.models.schema import Scenario, Run, Verdict, GuardrailMetric, Scorecard, LibraryEntry
+from app.llm_utils import (
+    GROQ_BASE_URL, get_model_name, ModelConfigError, build_async_client,
+    assert_safe_base_url, mask_key, safe_error,
+)
 import uuid
+from urllib.parse import urlparse
 from sqlmodel import Session, select
 from app.database import engine
 
 
 
 router = APIRouter()
+
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+
+class ModelUnderTest(BaseModel):
+    """User-supplied config for the model being evaluated (the agent under test).
+
+    Scenario generation and judging always run on the backend's own Groq creds;
+    only the runner uses this model. The api_key is used per request and is never
+    persisted to the database or written to logs.
+    """
+    provider: str = "groq"            # "groq" | "openai" | "custom"
+    api_key: str
+    base_url: Optional[str] = None    # required when provider == "custom"
+    model: Optional[str] = None       # required for openai/custom; defaults to backend model for groq
+    extra_headers: Optional[Dict[str, str]] = None
+
+
+def resolve_model_cfg(mut: Optional[ModelUnderTest]) -> Optional[Dict[str, Any]]:
+    """Validate a ModelUnderTest into a plain-dict config for the runner, or None
+    when nothing is supplied (runner then falls back to the backend's own creds).
+
+    Requires an API key; for a custom provider also requires a model id and a safe
+    base_url (SSRF-guarded). Raises ModelConfigError on bad input so callers can
+    return a clean 4xx instead of a 500."""
+    if mut is None:
+        return None
+    provider = (mut.provider or "groq").strip().lower()
+    api_key = (mut.api_key or "").strip()
+    if not api_key:
+        raise ModelConfigError("An API key is required for the model under test.")
+    if provider == "groq":
+        base_url, model, headers = GROQ_BASE_URL, ((mut.model or "").strip() or get_model_name()), None
+    elif provider == "openai":
+        base_url, model, headers = OPENAI_BASE_URL, (mut.model or "").strip(), None
+        if not model:
+            raise ModelConfigError("A model name is required (e.g. gpt-4o-mini).")
+    elif provider == "custom":
+        base_url = (mut.base_url or "").strip()
+        model = (mut.model or "").strip()
+        headers = mut.extra_headers or None
+        if not model:
+            raise ModelConfigError("A model name is required for a custom provider.")
+        # SSRF guard — only user-supplied URLs reach this path.
+        assert_safe_base_url(base_url)
+    else:
+        raise ModelConfigError(f"Unknown provider '{provider}'. Use groq, openai, or custom.")
+    return {"provider": provider, "base_url": base_url, "api_key": api_key,
+            "model": model, "extra_headers": headers}
+def model_secrets(mut: Optional[ModelUnderTest]) -> List[str]:
+    """Every user-supplied secret to redact in error paths: the API key AND any
+    custom auth-header values (a custom gateway often carries the real credential
+    in an Authorization / x-api-key header, not the api_key field). Values are
+    stripped to match what is actually transmitted, so masking-by-substring in
+    safe_error hits the same string an upstream error would echo. Never logged."""
+    if mut is None:
+        return []
+    out: List[str] = []
+    if mut.api_key and mut.api_key.strip():
+        out.append(mut.api_key.strip())
+    for v in (mut.extra_headers or {}).values():
+        if v and str(v).strip():
+            out.append(str(v))
+    return out
+
+
+def model_identity(cfg: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    """Masked, secret-free identity of the tested model — safe to return to the
+    UI and show to judges as proof an external model was plugged in."""
+    if not cfg:
+        return None
+    host = urlparse(cfg["base_url"]).hostname or cfg["base_url"]
+    return {
+        "provider": cfg["provider"],
+        "endpoint": host,
+        "model": cfg.get("model") or "",
+        "key": mask_key(cfg["api_key"]),
+    }
+
 
 class GenerateScenariosRequest(BaseModel):
     system_prompt: str
@@ -45,21 +129,27 @@ class ExecuteRunsRequest(BaseModel):
     system_prompt: str
     tools: List[Dict[str, Any]]
     samples: int = 1
+    model_under_test: Optional[ModelUnderTest] = None
 
 @router.post("/api/runs/execute", response_model=List[Run])
 async def execute_runs(req: ExecuteRunsRequest):
+    secrets = model_secrets(req.model_under_test)
     try:
+        model_cfg = resolve_model_cfg(req.model_under_test)
         runs = await execute_scenarios(
             scenario_ids=req.scenario_ids,
             agent_version=req.agent_version,
             system_prompt=req.system_prompt,
             tool_schemas=req.tools,
-            samples=req.samples
+            samples=req.samples,
+            model_cfg=model_cfg,
         )
         return runs
+    except ModelConfigError as e:
+        raise HTTPException(status_code=400, detail=safe_error(e, *secrets))
     except Exception as e:
-        print("API Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print("API Error:", safe_error(e, *secrets))
+        raise HTTPException(status_code=500, detail=safe_error(e, *secrets))
 
 @router.get("/api/runs/{run_id}", response_model=Run)
 def get_run(run_id: str):
@@ -108,6 +198,38 @@ def replay_run_endpoint(run_id: str, req: ReplayRunRequest):
     except Exception as e:
         print("Replay Error:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/llm/validate")
+async def validate_model_under_test(cfg: ModelUnderTest):
+    """Compatibility check for a user-supplied model-under-test. Validates the
+    config (key present, safe base_url for custom), then does a 1-token probe call
+    to confirm the key/endpoint/model actually work — WITHOUT persisting or logging
+    the key. Returns a masked identity the UI can show as proof of the plugged-in
+    model. This is the evaluator-independent 'test before you run' step."""
+    import time as _t
+    secrets = model_secrets(cfg)
+    try:
+        resolved = resolve_model_cfg(cfg)
+    except ModelConfigError as e:
+        raise HTTPException(status_code=400, detail=safe_error(e, *secrets))
+    if resolved is None:
+        raise HTTPException(status_code=400, detail="No model configuration supplied.")
+    try:
+        client = build_async_client(
+            resolved["base_url"], resolved["api_key"], resolved.get("extra_headers"), timeout=20.0,
+        )
+        t0 = _t.time()
+        await client.chat.completions.create(
+            model=resolved["model"],
+            max_tokens=1,
+            messages=[{"role": "user", "content": "ping"}],
+        )
+        latency_ms = int((_t.time() - t0) * 1000)
+        return {"ok": True, "identity": model_identity(resolved), "latency_ms": latency_ms}
+    except ModelConfigError as e:
+        raise HTTPException(status_code=400, detail=safe_error(e, *secrets))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Connection test failed: {safe_error(e, *secrets)}")
 
 @router.get("/api/scenarios/list", response_model=List[Scenario])
 def list_scenarios():
@@ -158,13 +280,16 @@ class CiGateRequest(BaseModel):
     task_domain: Optional[str] = None
     previous_version: Optional[str] = None
     min_score: int = 75
+    model_under_test: Optional[ModelUnderTest] = None
 
 @router.post("/api/ci/gate")
 async def ci_gate(req: CiGateRequest):
     """CI ship-gate. If an agent spec (system_prompt + tools) is supplied, runs the
     full pipeline first (generate -> execute -> classify) so CI can gate from
     scratch; otherwise gates the existing evaluation for the version."""
+    secrets = model_secrets(req.model_under_test)
     try:
+        model_cfg = resolve_model_cfg(req.model_under_test)
         if req.system_prompt and req.tools:
             domain = req.task_domain or "general"
             analysis = analyze_agent(
@@ -190,6 +315,7 @@ async def ci_gate(req: CiGateRequest):
                 agent_version=req.agent_version,
                 system_prompt=req.system_prompt,
                 tool_schemas=req.tools,
+                model_cfg=model_cfg,
             )
             # Classify inline (mirror /api/classify's rules -> judge cascade).
             with Session(engine) as session:
@@ -203,10 +329,12 @@ async def ci_gate(req: CiGateRequest):
 
         scorecard = generate_scorecard(req.agent_version, req.previous_version)
         gate = evaluate_gate(scorecard, req.min_score)
-        return {"gate": gate, "scorecard": scorecard}
+        return {"gate": gate, "scorecard": scorecard, "model_identity": model_identity(model_cfg)}
+    except ModelConfigError as e:
+        raise HTTPException(status_code=400, detail=safe_error(e, *secrets))
     except Exception as e:
-        print("CI Gate Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print("CI Gate Error:", safe_error(e, *secrets))
+        raise HTTPException(status_code=500, detail=safe_error(e, *secrets))
 
 @router.get("/api/badge/{agent_version}.svg")
 def get_badge(agent_version: str):
@@ -361,12 +489,15 @@ class LibraryRunRequest(BaseModel):
     system_prompt: str
     tools: List[Dict[str, Any]]
     entry_ids: Optional[List[str]] = None  # if omitted, run the whole library
+    model_under_test: Optional[ModelUnderTest] = None
 
 @router.post("/api/library/run")
 async def library_run(req: LibraryRunRequest):
     """Re-run saved Threat Library attacks against an agent version as a
     regression suite, then classify and return verdicts + a fresh scorecard."""
+    secrets = model_secrets(req.model_under_test)
     try:
+        model_cfg = resolve_model_cfg(req.model_under_test)
         with Session(engine) as session:
             q = select(LibraryEntry)
             if req.entry_ids:
@@ -401,6 +532,7 @@ async def library_run(req: LibraryRunRequest):
             agent_version=req.agent_version,
             system_prompt=req.system_prompt,
             tool_schemas=req.tools,
+            model_cfg=model_cfg,
         )
         verdicts = []
         with Session(engine) as session:
@@ -416,12 +548,14 @@ async def library_run(req: LibraryRunRequest):
                 session.refresh(v)
 
         scorecard = generate_scorecard(req.agent_version)
-        return {"verdicts": verdicts, "scorecard": scorecard}
+        return {"verdicts": verdicts, "scorecard": scorecard, "model_identity": model_identity(model_cfg)}
     except HTTPException:
         raise
+    except ModelConfigError as e:
+        raise HTTPException(status_code=400, detail=safe_error(e, *secrets))
     except Exception as e:
-        print("Library Run Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print("Library Run Error:", safe_error(e, *secrets))
+        raise HTTPException(status_code=500, detail=safe_error(e, *secrets))
 
 @router.get("/api/leaderboard")
 def leaderboard():

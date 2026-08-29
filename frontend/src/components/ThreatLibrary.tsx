@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listLibrary, runLibrary, getLeaderboard } from '../api';
+import { listLibrary, runLibrary, getLeaderboard, buildModelUnderTest, modelIdentityFromConfig } from '../api';
 import { Library, Trophy, PlayCircle, ShieldAlert, Loader2 } from 'lucide-react';
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -48,11 +48,13 @@ export default function ThreatLibrary({ state }: { state: any }) {
     setRunning(true);
     setMessage('');
     try {
-      const res = await runLibrary(state.agentVersion, state.systemPrompt, state.tools);
+      const res = await runLibrary(state.agentVersion, state.systemPrompt, state.tools, undefined, buildModelUnderTest(state.modelConfig));
       const verdicts = res?.verdicts || [];
       const fails = verdicts.filter((v: any) => v.outcome === 'FAIL').length;
+      const id = modelIdentityFromConfig(state.modelConfig);
+      const against = id ? `${state.agentVersion} on ${id.provider} (${id.endpoint})` : state.agentVersion;
       setMessage(
-        `Ran ${verdicts.length} saved attacks against ${state.agentVersion}: ` +
+        `Ran ${verdicts.length} saved attacks against ${against}: ` +
           `${verdicts.length - fails} passed, ${fails} failed. Score: ${res?.scorecard?.overall_score ?? '—'}/100.`
       );
       await refresh();
