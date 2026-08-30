@@ -15,6 +15,9 @@ from app.llm_utils import (
     GROQ_BASE_URL, get_model_name, ModelConfigError, build_async_client,
     assert_safe_base_url, mask_key, safe_error,
 )
+from app.integrations.github_gate import (
+    sync_gate_to_github, is_github_configured, GitHubGateError,
+)
 import uuid
 from urllib.parse import urlparse
 from sqlmodel import Session, select
@@ -273,6 +276,17 @@ def get_scorecard(agent_version: str, previous_version: str = None):
     scorecard = generate_scorecard(agent_version, previous_version)
     return scorecard
 
+class GitHubGateConfig(BaseModel):
+    """Where to post the gate verdict on GitHub. The token is NOT here — it is
+    read from the server-side GITHUB_TOKEN env var so it never travels in a
+    request body or reaches a log."""
+    owner: str
+    repo: str
+    sha: str                          # PR head commit the status attaches to
+    pr_number: Optional[int] = None   # required only when merge_on_pass is set
+    merge_on_pass: bool = False       # merge the PR directly when the gate passes
+
+
 class CiGateRequest(BaseModel):
     agent_version: str
     system_prompt: Optional[str] = None
@@ -281,6 +295,7 @@ class CiGateRequest(BaseModel):
     previous_version: Optional[str] = None
     min_score: int = 75
     model_under_test: Optional[ModelUnderTest] = None
+    github: Optional[GitHubGateConfig] = None
 
 @router.post("/api/ci/gate")
 async def ci_gate(req: CiGateRequest):
@@ -329,7 +344,27 @@ async def ci_gate(req: CiGateRequest):
 
         scorecard = generate_scorecard(req.agent_version, req.previous_version)
         gate = evaluate_gate(scorecard, req.min_score)
-        return {"gate": gate, "scorecard": scorecard, "model_identity": model_identity(model_cfg)}
+
+        github_result = None
+        if req.github is not None:
+            try:
+                github_result = await sync_gate_to_github(
+                    owner=req.github.owner,
+                    repo=req.github.repo,
+                    sha=req.github.sha,
+                    gate=gate,
+                    overall_score=scorecard.overall_score,
+                    safety_status=scorecard.safety_status,
+                    pr_number=req.github.pr_number,
+                    merge_on_pass=req.github.merge_on_pass,
+                )
+            except GitHubGateError as e:
+                # Don't fail the whole gate on a GitHub hiccup — surface it inline.
+                github_result = {"posted": False, "error": str(e)}
+
+        return {"gate": gate, "scorecard": scorecard,
+                "model_identity": model_identity(model_cfg),
+                "github": github_result}
     except ModelConfigError as e:
         raise HTTPException(status_code=400, detail=safe_error(e, *secrets))
     except Exception as e:

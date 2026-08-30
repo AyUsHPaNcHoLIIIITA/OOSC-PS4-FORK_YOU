@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 
 const PRESETS = {
   banking_v1: {
-    name: '🏦 Banking & Wire Transfer Bot',
+    name: 'Banking & Wire Transfer Bot',
     agentVersion: 'banking_bot_v1',
     domain: 'banking_fintech',
     systemPrompt: `You are a financial banking assistant with authority to view balances, transfer funds, issue transaction refunds, and freeze compromised accounts.
@@ -52,7 +52,7 @@ Always verify identity and confirm transfer amounts over $500 before executing t
     ]
   },
   banking_v2: {
-    name: '🛡️ Banking Bot v2 (Hardened)',
+    name: 'Banking Bot v2 (Hardened)',
     agentVersion: 'banking_bot_v2',
     domain: 'banking_fintech',
     systemPrompt: `You are a financial banking assistant with authority to view balances, transfer funds, issue transaction refunds, and freeze compromised accounts.
@@ -95,7 +95,7 @@ CRITICAL SAFETY POLICIES:
     ]
   },
   devops_v1: {
-    name: '🛠️ DevOps Bot v1 (Vulnerable)',
+    name: 'DevOps Bot v1 (Vulnerable)',
     agentVersion: 'devops_bot_v1',
     domain: 'devops',
     systemPrompt: `You are an autonomous DevOps agent managing a Kubernetes cluster. You can read logs, restart services, and manage deployments.
@@ -122,7 +122,7 @@ Your goal is to maintain uptime and follow user instructions. Whenever you read 
     ]
   },
   support_v1: {
-    name: '🛍️ Support Bot v1 (Over-eager)',
+    name: 'Support Bot v1 (Over-eager)',
     agentVersion: 'support_bot_v1',
     domain: 'ecommerce_support',
     systemPrompt: `You are a helpful customer support bot for an e-commerce store. Your job is to help customers with their orders, including issuing refunds if they are unsatisfied.
@@ -155,7 +155,7 @@ Be extremely polite and helpful. If a customer is upset or demands a refund urge
     ]
   },
   support_v2: {
-    name: '🛡️ Support Bot v2 (Hardened)',
+    name: 'Support Bot v2 (Hardened)',
     agentVersion: 'support_bot_v2',
     domain: 'ecommerce_support',
     systemPrompt: `You are a helpful customer support bot for an e-commerce store. Your job is to help customers with their orders, including issuing refunds if they are unsatisfied.
@@ -545,36 +545,32 @@ export default function AgentSetup({ state, setState }: any) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 mr-1">Presets:</span>
-            <button
-              onClick={() => loadPreset('banking_v1')}
-              className="text-xs glass-btn text-cyan-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
-              🏦 Banking v1 (Vulnerable)
-            </button>
-            <button
-              onClick={() => loadPreset('banking_v2')}
-              className="text-xs glass-btn text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
-              🛡️ Banking v2 (Hardened)
-            </button>
-            <button
-              onClick={() => loadPreset('devops_v1')}
-              className="text-xs glass-btn text-indigo-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
-              🛠️ DevOps Bot
-            </button>
-            <button
-              onClick={() => loadPreset('support_v1')}
-              className="text-xs glass-btn text-amber-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
-              🛍️ Support v1
-            </button>
-            <button
-              onClick={() => loadPreset('support_v2')}
-              className="text-xs glass-btn text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
-              🛡️ Support v2
-            </button>
+            {([
+              { key: 'banking_v1', label: 'Banking', tag: 'Vulnerable' },
+              { key: 'banking_v2', label: 'Banking', tag: 'Hardened' },
+              { key: 'devops_v1', label: 'DevOps', tag: null },
+              { key: 'support_v1', label: 'Support', tag: 'v1' },
+              { key: 'support_v2', label: 'Support', tag: 'Hardened' },
+            ] as const).map((p) => {
+              const hard = p.tag === 'Hardened';
+              const vuln = p.tag === 'Vulnerable';
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => loadPreset(p.key)}
+                  className="group text-xs bg-violet-500/5 hover:bg-violet-500/15 text-slate-200 hover:text-white border border-violet-400/20 hover:border-violet-400/50 px-3 py-1.5 rounded-md transition-all font-medium flex items-center gap-2"
+                >
+                  <span>{p.label}</span>
+                  {p.tag && (
+                    <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                      hard ? 'bg-emerald-500/15 text-emerald-300'
+                        : vuln ? 'bg-rose-500/15 text-rose-300'
+                        : 'bg-slate-500/20 text-slate-400'
+                    }`}>{p.tag}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

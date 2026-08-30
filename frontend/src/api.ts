@@ -242,6 +242,30 @@ export const getCiGate = async (agentVersion: string, previousVersion?: string, 
   return res.data;
 };
 
+// GitHub Ship-Gate: run the gate and post the verdict to a real PR as a commit
+// status (context "agentci/reliability-gate"), optionally merging on pass. The
+// GitHub token lives ONLY in the backend env (GITHUB_TOKEN) — never sent here.
+export interface GitHubGateConfig {
+  owner: string;
+  repo: string;
+  sha: string;
+  pr_number?: number;
+  merge_on_pass?: boolean;
+}
+export const postGateToGithub = async (
+  agentVersion: string,
+  github: GitHubGateConfig,
+  opts?: { previousVersion?: string; minScore?: number },
+) => {
+  const res = await api.post('/ci/gate', {
+    agent_version: agentVersion,
+    previous_version: opts?.previousVersion,
+    min_score: opts?.minScore ?? 75,
+    github,
+  });
+  return res.data;
+};
+
 // Absolute (or /api-proxied) URLs for direct <img src> / new-tab use — mirror the
 // same base axios uses, so whatever proxy makes the API reachable also serves these.
 export const badgeUrl = (agentVersion: string) =>
